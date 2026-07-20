@@ -1,0 +1,115 @@
+{
+  "title": "The background job queue",
+  "subtitle": "Subsystem onboarding · jobs/",
+  "slug": "2026-01-12-job-queue-onboarding",
+  "gate": [
+    {
+      "prompt": "The queue guarantees 'at-least-once' delivery. What does that promise actually guarantee?",
+      "options": [
+        {"text": "A job runs exactly one time, never more, never less", "correct": false},
+        {"text": "A job might run zero times if the worker is slow enough", "correct": false},
+        {"text": "A job will run one or more times — it may occasionally run twice, but never zero times", "correct": true},
+        {"text": "Jobs run in the exact order they were enqueued", "correct": false}
+      ],
+      "explanation": "At-least-once trades away exactly-once in exchange for never silently losing a job — the cost is that handlers must tolerate an occasional duplicate run."
+    },
+    {
+      "prompt": "Why must job handlers be idempotent?",
+      "options": [
+        {"text": "It makes them run faster", "correct": false},
+        {"text": "Because the queue can redeliver a job it isn't sure finished, so the same job may execute more than once", "correct": true},
+        {"text": "It's required to read from the database", "correct": false},
+        {"text": "Idempotency is only needed for payment-related jobs", "correct": false}
+      ],
+      "explanation": "Redelivery after a crash or a timeout means 'ran once' isn't guaranteed — only 'ran at least once' is, so re-running the same job must be safe."
+    },
+    {
+      "prompt": "What is the dead-letter queue for?",
+      "options": [
+        {"text": "Storing jobs that completed successfully, for auditing", "correct": false},
+        {"text": "Holding jobs that failed repeatedly, past the retry limit, for a human to inspect instead of retrying forever", "correct": true},
+        {"text": "A backup copy of the main queue in case it goes down", "correct": false},
+        {"text": "Jobs scheduled to run in the future", "correct": false}
+      ],
+      "explanation": "Retrying a broken job forever just wastes workers; the dead-letter queue is where the system gives up automatically and hands the problem to a person."
+    }
+  ],
+  "sections": [
+    {
+      "id": "background",
+      "heading": "Background",
+      "summary": "Some work is too slow to do inside a web request: resizing an uploaded image, generating a PDF report, sending a batch of emails. The job queue lets a request hand that work off to a pool of background workers and return immediately, instead of making the caller wait or timing out.",
+      "body": "<p>Without a queue, a request handler that needs to do slow work has two bad options: block the HTTP response until the work finishes (the user stares at a spinner, and the request can time out), or fire off the work and hope it finishes (and lose it entirely if the process restarts mid-task). The job queue is the subsystem that lets that work happen soon and reliably, without making the caller wait.</p><p>Three pieces cooperate: something that <strong>enqueues</strong> jobs (usually a request handler), a <strong>queue</strong> that durably holds them, and a pool of <strong>workers</strong> that pull jobs off the queue and run them.</p>"
+    },
+    {
+      "id": "intuition",
+      "heading": "Intuition",
+      "summary": "Picture a shared to-do list on a whiteboard. A worker claims a task by writing their name next to it, with a time limit, then erases it once done. If they crash first, the claim expires and someone else can pick the task back up — which is exactly why the same task can occasionally get done twice.",
+      "body": "<p>Picture a shared to-do list on a whiteboard. A worker claims a task by writing their name next to it, with a time limit; they do the work, then erase the entry. If they crash before erasing it, the claim eventually expires and someone else can pick the task back up — which is exactly why the same task can occasionally get done twice.</p><div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0;font-size:.86rem;'><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Request handler<br><span style='color:var(--muted)'>enqueue()</span></div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Queue<br><span style='color:var(--muted)'>durable storage</span></div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Worker pool<br><span style='color:var(--muted)'>lease → run → ack</span></div><div>→</div><div style='border:1px solid var(--bad);background:var(--card);border-radius:8px;padding:10px 12px;'>Dead-letter<br><span style='color:var(--muted)'>gave up</span></div></div><p>That kind of claim — one with a built-in time limit — is called a <strong>lease</strong>; the time limit itself is the <strong>visibility timeout</strong>. Once a worker leases a job, the queue hides it from other workers for that long, betting the worker will finish and acknowledge (<strong>ack</strong>) it first. If the worker crashes, stalls, or is killed before acking, the lease simply expires and the job becomes visible again for any worker to pick up. The queue has no way to tell a worker that's still working from one that died halfway through, so once the timeout passes it always assumes the pessimistic case.</p>"
+    },
+    {
+      "id": "code",
+      "heading": "The code",
+      "summary": "enqueue() writes a row with a job type and payload. Each worker loops: lease the oldest available job, look up its handler by type, run it, and ack on success. An unhandled exception leaves the job to be retried instead of acked.",
+      "body": "<p class='muted'><code>jobs/queue.py</code></p><p>Enqueuing is a single durable write — the caller doesn't wait for the job to run:</p><pre>def enqueue(job_type, payload, max_attempts=5):\n    db.jobs.insert(\n        type=job_type,\n        payload=json.dumps(payload),\n        status='available',\n        attempts=0,\n        max_attempts=max_attempts,\n    )</pre><p class='muted'><code>jobs/worker.py</code></p><p>The worker's poll loop leases one job at a time:</p><pre>VISIBILITY_TIMEOUT = timedelta(minutes=5)\n\ndef worker_loop():\n    while True:\n        job = db.jobs.lease_next(\n            statuses=['available', 'expired_lease'],\n            lease_until=now() + VISIBILITY_TIMEOUT,\n        )\n        if job is None:\n            sleep(1)\n            continue\n        run_job(job)</pre><p>Running a job dispatches to a handler by type, and only acks (marks done) on a clean return:</p><pre>HANDLERS = {'resize_image': resize_image_handler, 'send_email': send_email_handler}\n\ndef run_job(job):\n    handler = HANDLERS[job.type]\n    try:\n        handler(job)\n        db.jobs.ack(job.id)\n    except Exception:\n        db.jobs.mark_failed_attempt(job.id)  # retry logic decides what happens next</pre><p>Notice there's no <code>finally</code>-block ack — acking only on the success path is what makes a crash mid-handler safe: the job just stays leased until the timeout, then becomes available again.</p>"
+    },
+    {
+      "id": "failure-modes",
+      "heading": "Failure modes & idempotency",
+      "summary": "Retries use exponential backoff so a struggling downstream service isn't hammered immediately; after max_attempts, the job moves to the dead-letter queue instead of retrying forever. Because redelivery is possible, every handler is written to be safe to run twice.",
+      "body": "<p class='muted'><code>jobs/worker.py</code></p><p>A failed attempt doesn't retry instantly — the delay grows with each attempt:</p><pre>def mark_failed_attempt(job):\n    job.attempts += 1\n    if job.attempts >= job.max_attempts:\n        move_to_dead_letter(job)\n        return\n    backoff = min(2 ** job.attempts, 300)  # seconds, capped at 5 minutes\n    job.status = 'available'\n    job.available_at = now() + timedelta(seconds=backoff)\n    job.save()</pre><p>The cap matters: uncapped exponential backoff on a job with a generous max_attempts could end up scheduled hours or days out, which is rarely what anyone wants for a job someone is actively waiting on.</p><p>Because a lease can expire and a job be redelivered, every handler needs to tolerate running more than once for the same input. The email handler doesn't track <em>have I sent this before</em> in memory — a second worker process wouldn't know about it — so it hands the email provider an idempotency key instead:</p><p class='muted'><code>jobs/handlers/email.py</code></p><pre>def send_email_handler(job):\n    payload = json.loads(job.payload)\n    email_provider.send(\n        to=payload['to'],\n        template=payload['template'],\n        idempotency_key=job.id,  # provider dedupes on this\n    )</pre><p>If this same job gets redelivered and re-run, the provider recognizes the repeated idempotency key and skips sending a second email — the handler running twice is harmless. Jobs that only touch your own database can get the same property from a unique constraint (an insert-if-not-exists on the same key) instead of relying on a third party.</p>"
+    }
+  ],
+  "quiz": [
+    {
+      "prompt": "A worker leases a job, then crashes before acking it. What happens to that job?",
+      "options": [
+        {"text": "It's lost permanently", "correct": false},
+        {"text": "It stays leased forever until someone intervenes manually", "correct": false},
+        {"text": "Its lease expires after the visibility timeout, and it becomes available for another worker to pick up", "correct": true},
+        {"text": "It moves straight to the dead-letter queue", "correct": false}
+      ],
+      "explanation": "The visibility timeout is exactly the mechanism that recovers jobs from crashed workers — no manual step needed."
+    },
+    {
+      "prompt": "Why does the worker only ack a job on a clean return from the handler, with no ack in a finally block?",
+      "options": [
+        {"text": "Acking in a finally block would be slower", "correct": false},
+        {"text": "So a crash or exception during the handler leaves the job unacked, letting the lease expire and the job retry instead of being silently marked done", "correct": true},
+        {"text": "Finally blocks aren't supported in the worker's language", "correct": false},
+        {"text": "To reduce database writes", "correct": false}
+      ],
+      "explanation": "Acking unconditionally would mark a job done even when the handler blew up partway through, losing the work with no retry."
+    },
+    {
+      "prompt": "Why does retry backoff grow with each attempt instead of retrying immediately every time?",
+      "options": [
+        {"text": "To make the queue easier to monitor", "correct": false},
+        {"text": "So repeated failures (often from an overloaded downstream service) don't get hammered with immediate retries, making things worse", "correct": true},
+        {"text": "It's a side effect of how leases work and can't be avoided", "correct": false},
+        {"text": "To guarantee jobs run in order", "correct": false}
+      ],
+      "explanation": "Immediate retries against a struggling dependency tend to prolong the outage; spacing them out gives it room to recover."
+    },
+    {
+      "prompt": "What ultimately happens to a job that keeps failing past max_attempts?",
+      "options": [
+        {"text": "It retries forever with the maximum backoff", "correct": false},
+        {"text": "It's silently discarded", "correct": false},
+        {"text": "It moves to the dead-letter queue for a human to inspect", "correct": true},
+        {"text": "It's automatically marked as succeeded", "correct": false}
+      ],
+      "explanation": "The dead-letter queue is the deliberate stopping point — retrying indefinitely would waste workers on a job that isn't going to succeed on its own."
+    },
+    {
+      "prompt": "Why does the email handler pass the job's id as an idempotency key to the email provider, rather than tracking 'already sent' in the worker's own memory?",
+      "options": [
+        {"text": "It's faster than a database lookup", "correct": false},
+        {"text": "Because a retry might be picked up by a different worker process that has no memory of the first attempt", "correct": true},
+        {"text": "The email provider requires an idempotency key for all requests", "correct": false},
+        {"text": "To make the email arrive faster", "correct": false}
+      ],
+      "explanation": "In-memory state doesn't survive a crash and isn't shared across worker processes, so the dedupe has to live somewhere durable and shared — here, the email provider itself."
+    }
+  ]
+}

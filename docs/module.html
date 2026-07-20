@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The background job queue</title>
+<style>
+  :root{
+    --bg:#ffffff;--fg:#1a1a1a;--muted:#5c6670;--line:#e3e6ea;
+    --accent:#2563eb;--ok:#16a34a;--bad:#dc2626;--card:#f7f8fa;--radius:10px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa4af;--line:#262b33;
+      --accent:#60a5fa;--ok:#4ade80;--bad:#f87171;--card:#161a20;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 24px 96px;}
+  header.page{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px;}
+  header.page h1{font-size:1.9rem;margin:0 0 4px;letter-spacing:-0.01em;}
+  header.page .subtitle{color:var(--muted);margin:0;}
+  h2{font-size:1.35rem;margin:2.2em 0 .4em;letter-spacing:-0.01em;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 18px;margin:22px 0;font-size:.94rem;}
+  .toc ul{margin:.4em 0 0;padding-left:1.1em;} .toc li{margin:.15em 0;}
+  .section-summary{font-size:1.02rem;}
+  details.deep{border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--card);padding:0 16px;margin:.6em 0;}
+  details.deep>summary{cursor:pointer;padding:12px 0;font-weight:600;color:var(--accent);
+    list-style:none;}
+  details.deep>summary::-webkit-details-marker{display:none}
+  details.deep>summary::before{content:"▸ ";}
+  details.deep[open]>summary::before{content:"▾ ";}
+  .deep-body{padding:4px 0 16px;border-top:1px solid var(--line);margin-top:0;}
+  pre{white-space:pre-wrap;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);padding:14px 16px;overflow-x:auto;font-size:.88rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;margin:18px 0;}
+  .gate-banner{border-left:4px solid var(--accent);}
+  .question{padding:14px 0;border-top:1px solid var(--line);}
+  .question:first-of-type{border-top:none}
+  .prompt{font-weight:600;margin:.2em 0 .6em;}
+  .options{list-style:none;margin:0;padding:0;}
+  .option{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:8px;
+    cursor:pointer;} .option:hover{background:rgba(127,127,127,.08)}
+  .option input{margin-top:4px}
+  .question.answered .option{cursor:default}
+  .option.correct{background:rgba(22,163,74,.14);}
+  .option.wrong{background:rgba(220,38,38,.14);}
+  .verdict{margin:.5em 0 .2em;font-weight:600;}
+  .verdict.pass{color:var(--ok)} .verdict.fail{color:var(--bad)}
+  .explanation{color:var(--muted);font-size:.94rem;margin:.3em 0 .2em;
+    border-left:3px solid var(--line);padding-left:12px;}
+  button{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;
+    border-radius:8px;padding:9px 16px;cursor:pointer;} button:hover{filter:brightness(1.06)}
+  button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+  .muted{color:var(--muted);font-size:.94rem;}
+  #deep-content[hidden]{display:none}
+  .pill{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 9px;border-radius:999px;
+    background:var(--accent);color:#fff;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>The background job queue</h1>
+    <p class="subtitle">Subsystem onboarding · jobs/</p>
+  </header>
+
+  <div class="card gate-banner" id="gate-card">
+  <p><span class="pill">Start here</span> &nbsp;Already familiar with this change? Take this 3-question check. Ace it and you can skip straight to the quiz; miss one and the full walkthrough opens up.</p>
+  <div id="gate">
+    <div class="question" data-correct="1">
+      <p class="prompt">The queue guarantees &#x27;at-least-once&#x27; delivery. What does that promise actually guarantee?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-0" value="0">
+            <span>A job runs exactly one time, never more, never less</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-0" value="1">
+            <span>A job will run one or more times — it may occasionally run twice, but never zero times</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-0" value="2">
+            <span>Jobs run in the exact order they were enqueued</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-0" value="3">
+            <span>A job might run zero times if the worker is slow enough</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>At-least-once trades away exactly-once in exchange for never silently losing a job — the cost is that handlers must tolerate an occasional duplicate run.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="2">
+      <p class="prompt">Why must job handlers be idempotent?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-1" value="0">
+            <span>It makes them run faster</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-1" value="1">
+            <span>It&#x27;s required to read from the database</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-1" value="2">
+            <span>Because the queue can redeliver a job it isn&#x27;t sure finished, so the same job may execute more than once</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-1" value="3">
+            <span>Idempotency is only needed for payment-related jobs</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>Redelivery after a crash or a timeout means &#x27;ran once&#x27; isn&#x27;t guaranteed — only &#x27;ran at least once&#x27; is, so re-running the same job must be safe.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="1">
+      <p class="prompt">What is the dead-letter queue for?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-2" value="0">
+            <span>Storing jobs that completed successfully, for auditing</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-2" value="1">
+            <span>Holding jobs that failed repeatedly, past the retry limit, for a human to inspect instead of retrying forever</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-2" value="2">
+            <span>A backup copy of the main queue in case it goes down</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="gate-2" value="3">
+            <span>Jobs scheduled to run in the future</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>Retrying a broken job forever just wastes workers; the dead-letter queue is where the system gives up automatically and hands the problem to a person.</div>
+      <div class="verdict" hidden></div>
+    </div>
+  </div>
+  <div id="gate-result" class="verdict" hidden></div>
+  <div class="row">
+    <button id="gate-check">Check my understanding</button>
+    <button id="gate-skip" class="secondary">Skip the check, show me everything</button>
+  </div>
+</div>
+
+  <nav class="toc" hidden><strong>Contents</strong>
+  <ul>
+    <li><a href="#background">Background</a></li>
+    <li><a href="#intuition">Intuition</a></li>
+    <li><a href="#code">The code</a></li>
+    <li><a href="#failure-modes">Failure modes &amp; idempotency</a></li>
+  </ul>
+  </nav>
+
+  <div id="deep-content" hidden>
+  <section id="background" class="doc-section">
+    <h2>Background</h2>
+    <p class="section-summary">Some work is too slow to do inside a web request: resizing an uploaded image, generating a PDF report, sending a batch of emails. The job queue lets a request hand that work off to a pool of background workers and return immediately, instead of making the caller wait or timing out.</p>
+    <details class="deep">
+      <summary>Show the full walkthrough</summary>
+      <div class="deep-body">
+<p>Without a queue, a request handler that needs to do slow work has two bad options: block the HTTP response until the work finishes (the user stares at a spinner, and the request can time out), or fire off the work and hope it finishes (and lose it entirely if the process restarts mid-task). The job queue is the subsystem that lets that work happen soon and reliably, without making the caller wait.</p><p>Three pieces cooperate: something that <strong>enqueues</strong> jobs (usually a request handler), a <strong>queue</strong> that durably holds them, and a pool of <strong>workers</strong> that pull jobs off the queue and run them.</p>
+      </div>
+    </details>
+  </section>
+  <section id="intuition" class="doc-section">
+    <h2>Intuition</h2>
+    <p class="section-summary">Picture a shared to-do list on a whiteboard. A worker claims a task by writing their name next to it, with a time limit, then erases it once done. If they crash first, the claim expires and someone else can pick the task back up — which is exactly why the same task can occasionally get done twice.</p>
+    <details class="deep">
+      <summary>Show the full walkthrough</summary>
+      <div class="deep-body">
+<p>Picture a shared to-do list on a whiteboard. A worker claims a task by writing their name next to it, with a time limit; they do the work, then erase the entry. If they crash before erasing it, the claim eventually expires and someone else can pick the task back up — which is exactly why the same task can occasionally get done twice.</p><div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0;font-size:.86rem;'><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Request handler<br><span style='color:var(--muted)'>enqueue()</span></div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Queue<br><span style='color:var(--muted)'>durable storage</span></div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>Worker pool<br><span style='color:var(--muted)'>lease → run → ack</span></div><div>→</div><div style='border:1px solid var(--bad);background:var(--card);border-radius:8px;padding:10px 12px;'>Dead-letter<br><span style='color:var(--muted)'>gave up</span></div></div><p>That kind of claim — one with a built-in time limit — is called a <strong>lease</strong>; the time limit itself is the <strong>visibility timeout</strong>. Once a worker leases a job, the queue hides it from other workers for that long, betting the worker will finish and acknowledge (<strong>ack</strong>) it first. If the worker crashes, stalls, or is killed before acking, the lease simply expires and the job becomes visible again for any worker to pick up. The queue has no way to tell a worker that's still working from one that died halfway through, so once the timeout passes it always assumes the pessimistic case.</p>
+      </div>
+    </details>
+  </section>
+  <section id="code" class="doc-section">
+    <h2>The code</h2>
+    <p class="section-summary">enqueue() writes a row with a job type and payload. Each worker loops: lease the oldest available job, look up its handler by type, run it, and ack on success. An unhandled exception leaves the job to be retried instead of acked.</p>
+    <details class="deep">
+      <summary>Show the full walkthrough</summary>
+      <div class="deep-body">
+<p class='muted'><code>jobs/queue.py</code></p><p>Enqueuing is a single durable write — the caller doesn't wait for the job to run:</p><pre>def enqueue(job_type, payload, max_attempts=5):
+    db.jobs.insert(
+        type=job_type,
+        payload=json.dumps(payload),
+        status='available',
+        attempts=0,
+        max_attempts=max_attempts,
+    )</pre><p class='muted'><code>jobs/worker.py</code></p><p>The worker's poll loop leases one job at a time:</p><pre>VISIBILITY_TIMEOUT = timedelta(minutes=5)
+
+def worker_loop():
+    while True:
+        job = db.jobs.lease_next(
+            statuses=['available', 'expired_lease'],
+            lease_until=now() + VISIBILITY_TIMEOUT,
+        )
+        if job is None:
+            sleep(1)
+            continue
+        run_job(job)</pre><p>Running a job dispatches to a handler by type, and only acks (marks done) on a clean return:</p><pre>HANDLERS = {'resize_image': resize_image_handler, 'send_email': send_email_handler}
+
+def run_job(job):
+    handler = HANDLERS[job.type]
+    try:
+        handler(job)
+        db.jobs.ack(job.id)
+    except Exception:
+        db.jobs.mark_failed_attempt(job.id)  # retry logic decides what happens next</pre><p>Notice there's no <code>finally</code>-block ack — acking only on the success path is what makes a crash mid-handler safe: the job just stays leased until the timeout, then becomes available again.</p>
+      </div>
+    </details>
+  </section>
+  <section id="failure-modes" class="doc-section">
+    <h2>Failure modes &amp; idempotency</h2>
+    <p class="section-summary">Retries use exponential backoff so a struggling downstream service isn&#x27;t hammered immediately; after max_attempts, the job moves to the dead-letter queue instead of retrying forever. Because redelivery is possible, every handler is written to be safe to run twice.</p>
+    <details class="deep">
+      <summary>Show the full walkthrough</summary>
+      <div class="deep-body">
+<p class='muted'><code>jobs/worker.py</code></p><p>A failed attempt doesn't retry instantly — the delay grows with each attempt:</p><pre>def mark_failed_attempt(job):
+    job.attempts += 1
+    if job.attempts >= job.max_attempts:
+        move_to_dead_letter(job)
+        return
+    backoff = min(2 ** job.attempts, 300)  # seconds, capped at 5 minutes
+    job.status = 'available'
+    job.available_at = now() + timedelta(seconds=backoff)
+    job.save()</pre><p>The cap matters: uncapped exponential backoff on a job with a generous max_attempts could end up scheduled hours or days out, which is rarely what anyone wants for a job someone is actively waiting on.</p><p>Because a lease can expire and a job be redelivered, every handler needs to tolerate running more than once for the same input. The email handler doesn't track <em>have I sent this before</em> in memory — a second worker process wouldn't know about it — so it hands the email provider an idempotency key instead:</p><p class='muted'><code>jobs/handlers/email.py</code></p><pre>def send_email_handler(job):
+    payload = json.loads(job.payload)
+    email_provider.send(
+        to=payload['to'],
+        template=payload['template'],
+        idempotency_key=job.id,  # provider dedupes on this
+    )</pre><p>If this same job gets redelivered and re-run, the provider recognizes the repeated idempotency key and skips sending a second email — the handler running twice is harmless. Jobs that only touch your own database can get the same property from a unique constraint (an insert-if-not-exists on the same key) instead of relying on a third party.</p>
+      </div>
+    </details>
+  </section>
+
+  <section id="quiz-section" class="doc-section">
+    <h2>Quiz</h2>
+    <p class="muted">Confirm it stuck. Answer positions are shuffled.</p>
+    <div class="card" id="quiz">
+    <div class="question" data-correct="2">
+      <p class="prompt">A worker leases a job, then crashes before acking it. What happens to that job?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-0" value="0">
+            <span>It&#x27;s lost permanently</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-0" value="1">
+            <span>It stays leased forever until someone intervenes manually</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-0" value="2">
+            <span>Its lease expires after the visibility timeout, and it becomes available for another worker to pick up</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-0" value="3">
+            <span>It moves straight to the dead-letter queue</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>The visibility timeout is exactly the mechanism that recovers jobs from crashed workers — no manual step needed.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="1">
+      <p class="prompt">Why does the worker only ack a job on a clean return from the handler, with no ack in a finally block?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-1" value="0">
+            <span>Finally blocks aren&#x27;t supported in the worker&#x27;s language</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-1" value="1">
+            <span>So a crash or exception during the handler leaves the job unacked, letting the lease expire and the job retry instead of being silently marked done</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-1" value="2">
+            <span>Acking in a finally block would be slower</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-1" value="3">
+            <span>To reduce database writes</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>Acking unconditionally would mark a job done even when the handler blew up partway through, losing the work with no retry.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="2">
+      <p class="prompt">Why does retry backoff grow with each attempt instead of retrying immediately every time?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-2" value="0">
+            <span>To guarantee jobs run in order</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-2" value="1">
+            <span>It&#x27;s a side effect of how leases work and can&#x27;t be avoided</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-2" value="2">
+            <span>So repeated failures (often from an overloaded downstream service) don&#x27;t get hammered with immediate retries, making things worse</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-2" value="3">
+            <span>To make the queue easier to monitor</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>Immediate retries against a struggling dependency tend to prolong the outage; spacing them out gives it room to recover.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="3">
+      <p class="prompt">What ultimately happens to a job that keeps failing past max_attempts?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-3" value="0">
+            <span>It&#x27;s automatically marked as succeeded</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-3" value="1">
+            <span>It retries forever with the maximum backoff</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-3" value="2">
+            <span>It&#x27;s silently discarded</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-3" value="3">
+            <span>It moves to the dead-letter queue for a human to inspect</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>The dead-letter queue is the deliberate stopping point — retrying indefinitely would waste workers on a job that isn&#x27;t going to succeed on its own.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    <div class="question" data-correct="2">
+      <p class="prompt">Why does the email handler pass the job&#x27;s id as an idempotency key to the email provider, rather than tracking &#x27;already sent&#x27; in the worker&#x27;s own memory?</p>
+      <ul class="options">
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-4" value="0">
+            <span>It&#x27;s faster than a database lookup</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-4" value="1">
+            <span>The email provider requires an idempotency key for all requests</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-4" value="2">
+            <span>Because a retry might be picked up by a different worker process that has no memory of the first attempt</span>
+          </label>
+        </li>
+        <li>
+          <label class="option">
+            <input type="radio" name="quiz-4" value="3">
+            <span>To make the email arrive faster</span>
+          </label>
+        </li>
+      </ul>
+      <div class="explanation" hidden>In-memory state doesn&#x27;t survive a crash and isn&#x27;t shared across worker processes, so the dedupe has to live somewhere durable and shared — here, the email provider itself.</div>
+      <div class="verdict" hidden></div>
+    </div>
+    </div>
+    <div class="row"><button id="quiz-check">Check answers</button></div>
+    <div id="quiz-result" class="verdict" hidden></div>
+  </section>
+  </div>
+</div>
+<script>
+  // Grade a block of questions. Returns [correctCount, total].
+  function gradeBlock(root){
+    const qs = [...root.querySelectorAll('.question')];
+    let correct = 0;
+    for(const q of qs){
+      const want = +q.dataset.correct;
+      const picked = q.querySelector('input:checked');
+      const opts = [...q.querySelectorAll('.option')];
+      q.classList.add('answered');
+      opts.forEach((o,i)=>{
+        const input = o.querySelector('input'); input.disabled = true;
+        if(i===want) o.classList.add('correct');
+        else if(input.checked) o.classList.add('wrong');
+      });
+      const exp = q.querySelector('.explanation'); if(exp) exp.hidden = false;
+      const v = q.querySelector('.verdict');
+      const got = picked && +picked.value===want;
+      if(got){correct++; v.textContent='Correct'; v.className='verdict pass';}
+      else{v.textContent = picked? 'Not quite' : 'No answer'; v.className='verdict fail';}
+      v.hidden = false;
+    }
+    return [correct, qs.length];
+  }
+
+  function revealDeep(open){
+    const dc = document.getElementById('deep-content');
+    if(dc) dc.hidden = false;
+    if(open) document.querySelectorAll('details.deep').forEach(d=>d.open=true);
+    const toc = document.querySelector('.toc'); if(toc) toc.hidden = false;
+  }
+
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const gateForm = document.getElementById('gate');
+    const gateBtn = document.getElementById('gate-check');
+    if(gateBtn){
+      gateBtn.addEventListener('click', ()=>{
+        const [c,t] = gradeBlock(gateForm);
+        const res = document.getElementById('gate-result');
+        const passed = c===t;
+        // Passed the gate -> you already know this. Keep the deep dive collapsed.
+        // Missed one   -> reveal everything, expanded, so you can read up.
+        revealDeep(!passed);
+        res.hidden = false;
+        res.className = 'verdict ' + (passed?'pass':'fail');
+        res.textContent = passed
+          ? `You got ${c}/${t}. You already have a solid grasp — the walkthrough below is collapsed. Expand any part you want, or jump to the final quiz.`
+          : `You got ${c}/${t}. No problem — the full walkthrough is expanded below. The quiz at the end confirms it stuck.`;
+        gateBtn.hidden = true;
+        document.getElementById('gate-skip').hidden = true;
+      });
+    }
+    const skip = document.getElementById('gate-skip');
+    if(skip) skip.addEventListener('click', ()=>{ revealDeep(true); skip.closest('.row').hidden = true; });
+
+    const quizBtn = document.getElementById('quiz-check');
+    if(quizBtn){
+      quizBtn.addEventListener('click', ()=>{
+        const [c,t] = gradeBlock(document.getElementById('quiz'));
+        const res = document.getElementById('quiz-result');
+        res.hidden = false;
+        res.className = 'verdict ' + (c===t?'pass':'fail');
+        res.textContent = `You scored ${c}/${t}.`;
+        quizBtn.hidden = true;
+      });
+    }
+  });
+</script>
+</body>
+</html>

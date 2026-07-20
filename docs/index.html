@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>explain-code — test-first code walkthroughs</title>
+<meta name="description" content="Turn a PR, a feature, or an unfamiliar module into a self-contained HTML walkthrough with a test-first gate, brief-by-default sections, and a shuffled quiz.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#ffffff;--fg:#1a1a1a;--muted:#5c6670;--line:#e3e6ea;
+    --accent:#2563eb;--ok:#16a34a;--bad:#dc2626;--card:#f7f8fa;--radius:10px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa4af;--line:#262b33;
+      --accent:#60a5fa;--ok:#4ade80;--bad:#f87171;--card:#161a20;}
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 24px 96px;}
+  header.page{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px;}
+  header.page h1{font-size:1.9rem;margin:0 0 4px;letter-spacing:-0.01em;}
+  header.page .subtitle{color:var(--muted);margin:0;}
+  h2{font-size:1.35rem;margin:2.2em 0 .4em;letter-spacing:-0.01em;}
+  p.lede{font-size:1.08rem;}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;}
+  pre{white-space:pre-wrap;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);padding:14px 16px;overflow-x:auto;font-size:.88rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px 22px;margin:18px 0;}
+  button, .btn{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;
+    border-radius:8px;padding:9px 16px;cursor:pointer;display:inline-block;}
+  button:hover, .btn:hover{filter:brightness(1.06);text-decoration:none}
+  .btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent);}
+  .muted{color:var(--muted);font-size:.94rem;}
+  .pill{display:inline-block;font-size:.78rem;font-weight:700;padding:2px 9px;border-radius:999px;
+    background:var(--accent);color:#fff;vertical-align:middle;}
+  .demo-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;margin:18px 0;}
+  .demo-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;}
+  .demo-card h3{margin:.5em 0 .3em;font-size:1.08rem;}
+  .demo-card p{margin:.3em 0;}
+  .demo-card .row{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;}
+  .steps{padding-left:1.2em;}
+  .steps li{margin:.4em 0;}
+  footer{margin-top:3em;padding-top:20px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:.92rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <h1>explain-code</h1>
+    <p class="subtitle">Test-first code walkthroughs — pass the gate and skip the explanation.</p>
+  </header>
+
+  <p class="lede">explain-code turns a piece of code — a PR, a whole feature, or a module
+  you're onboarding onto — into a single self-contained HTML page. A short diagnostic
+  <strong>gate</strong> runs first: ace it and the deep walkthrough stays collapsed, you skip
+  straight to the quiz; miss a question and the full explanation expands automatically. Every
+  section leads with a short summary that's always visible, with a beginner-friendly deep dive
+  one click away. One artifact serves both the 60-second PR review and the hour-long onboarding
+  read.</p>
+
+  <h2>Live demos</h2>
+  <p class="muted">Each demo is rendered straight from a JSON spec by the same
+  <code>render.py</code> this plugin ships — nothing hand-written, nothing that can drift.
+  Try the gate: answer honestly and see the walkthrough adapt.</p>
+
+  <div class="demo-grid">
+    <div class="demo-card">
+      <span class="pill">Fast PR review</span>
+      <h3>Fix skipped notes in cursor-based pagination</h3>
+      <p>A small, single-purpose bug fix: a non-unique pagination cursor was silently
+      dropping rows. Two files, one root cause — the kind of PR you want to review in
+      under a minute.</p>
+      <div class="row"><a class="btn" href="pr.html">Open the demo →</a></div>
+    </div>
+    <div class="demo-card">
+      <span class="pill">Feature walkthrough</span>
+      <h3>Email verification for new sign-ups</h3>
+      <p>A feature spanning a token service, a mailer, and a few routes. More surface
+      area than a single-file diff, with real design decisions worth understanding —
+      hashing, expiry, single-use tokens, resend abuse.</p>
+      <div class="row"><a class="btn" href="feature.html">Open the demo →</a></div>
+    </div>
+    <div class="demo-card">
+      <span class="pill">Onboarding</span>
+      <h3>The background job queue</h3>
+      <p>A whole subsystem for a new hire to get oriented in: producers, a durable
+      queue, worker leases, retry backoff, dead-letter handling, and why every handler
+      has to be idempotent.</p>
+      <div class="row"><a class="btn" href="module.html">Open the demo →</a></div>
+    </div>
+  </div>
+
+  <h2>Install</h2>
+  <p>Inside an interactive Claude Code or Cowork session:</p>
+  <pre>/plugin marketplace add elroy-galbraith/explain-code
+/plugin install explain-code@explain-code-marketplace</pre>
+  <p class="muted">Then just ask Claude to explain a diff, a PR, a feature, or a module —
+  the skill triggers on phrases like "explain this PR" or "walk me through this module."</p>
+
+  <footer>
+    <p>
+      <a href="https://github.com/elroy-galbraith/explain-code">github.com/elroy-galbraith/explain-code</a>
+      · MIT licensed · these three pages are re-rendered from
+      <a href="https://github.com/elroy-galbraith/explain-code/tree/main/docs/specs">docs/specs/*.json</a>
+      on every push to <code>main</code>.
+    </p>
+  </footer>
+</div>
+</body>
+</html>

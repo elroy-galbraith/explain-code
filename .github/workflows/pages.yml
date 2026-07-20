@@ -1,0 +1,56 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Re-render the demos from their JSON specs on every build, so the
+      # published pages can never drift from render.py or the spec files.
+      - name: Render demo specs
+        run: |
+          set -e
+          RENDER=explain-code/skills/explain-code/scripts/render.py
+          python3 "$RENDER" docs/specs/pr.json      -o docs/pr.html
+          python3 "$RENDER" docs/specs/feature.json -o docs/feature.html
+          python3 "$RENDER" docs/specs/module.json  -o docs/module.html
+
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

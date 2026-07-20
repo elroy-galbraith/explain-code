@@ -1,0 +1,115 @@
+{
+  "title": "Email verification for new sign-ups",
+  "subtitle": "Feature · accounts-service",
+  "slug": "2026-06-02-email-verification",
+  "gate": [
+    {
+      "prompt": "Why does the service store a hash of the verification token instead of the token itself?",
+      "options": [
+        {"text": "Hashing is faster than storing a plain string", "correct": false},
+        {"text": "So that reading the database (a backup, a log, a leaked dump) doesn't hand out a working token", "correct": true},
+        {"text": "Because email links can't contain long strings", "correct": false},
+        {"text": "So the token can be recovered later if the user loses the email", "correct": false}
+      ],
+      "explanation": "The token in the email is the secret; the database only needs to recognize it, not reproduce it — the same reasoning as hashing passwords."
+    },
+    {
+      "prompt": "What's the risk of a verification token that never expires?",
+      "options": [
+        {"text": "It would use more storage", "correct": false},
+        {"text": "An old email sitting in an inbox, a forward, or a leaked mailbox stays a valid account-takeover path indefinitely", "correct": true},
+        {"text": "The email provider would flag it as spam", "correct": false},
+        {"text": "It would break the resend button", "correct": false}
+      ],
+      "explanation": "An expiry bounds how long a stale or leaked link stays dangerous, and forces a fresh token if the user takes too long."
+    },
+    {
+      "prompt": "Why rate-limit the resend-verification-email endpoint per account rather than leaving it unlimited?",
+      "options": [
+        {"text": "To save on email sending costs only", "correct": false},
+        {"text": "So it can't be used to mail-bomb an inbox that isn't the attacker's own", "correct": true},
+        {"text": "Because email providers block all automated mail", "correct": false},
+        {"text": "To force users to wait before logging in", "correct": false}
+      ],
+      "explanation": "Anyone can type someone else's email into the sign-up form; without a limit, resend becomes a free tool for spamming that inbox."
+    }
+  ],
+  "sections": [
+    {
+      "id": "background",
+      "heading": "Background",
+      "summary": "Sign-up previously accepted any email address at face value: nothing confirmed that the person typing it actually controlled that inbox. That made typo'd and fake addresses indistinguishable from real ones, and meant password-reset or billing emails could silently go nowhere. This feature adds a verification step between sign-up and full access.",
+      "body": "<p>Before this feature, <code>POST /signup</code> created an active account immediately from just an email and password. Nothing confirmed the email was real or belonged to the person signing up. Support saw two recurring problems traced back to this: accounts created with typo'd addresses that could never receive a password reset, and a steady trickle of throwaway signups skewing usage metrics.</p><p>The fix is the standard pattern: create the account, but keep it in a limited state until the person proves they control the inbox by clicking a link.</p>"
+    },
+    {
+      "id": "intuition",
+      "heading": "Intuition",
+      "summary": "Think of the verification token as a wristband handed out at sign-up: it's random and can't be guessed, it's checked once at the door, and it expires. Sign-up hands out the wristband by email instead of in person — clicking the link is showing the wristband.",
+      "body": "<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:14px 0;font-size:.86rem;'><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>1. Sign up</div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>2. Account created<br><span style='color:var(--muted)'>unverified</span></div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>3. Email sent<br>with token link</div><div>→</div><div style='border:1px solid var(--line);background:var(--card);border-radius:8px;padding:10px 12px;'>4. Link clicked</div><div>→</div><div style='border:1px solid var(--accent);background:var(--card);border-radius:8px;padding:10px 12px;'>5. Verified</div></div><p>Between steps 2 and 4 the account exists but is limited — it can log in and see its own settings, but can't do anything that depends on a working email address, like inviting teammates or receiving billing notices. Step 4 only succeeds once: the token is deleted the moment it succeeds, so the same email link can't verify the account twice or be replayed by someone who later gains access to that inbox.</p>"
+    },
+    {
+      "id": "code",
+      "heading": "The code",
+      "summary": "A TokenService creates a random opaque token, stores only its hash with an expiry, and emails the raw token to the user. The verify endpoint looks up the hash, checks the expiry, marks the account verified, and deletes the token so it can't be reused.",
+      "body": "<p class='muted'><code>accounts/token_service.py</code></p><p>Creating a token at sign-up time:</p><pre>class TokenService:\n    TTL = timedelta(hours=24)\n\n    def create_for(self, user):\n        raw_token = secrets.token_urlsafe(32)\n        db.verification_tokens.insert(\n            user_id=user.id,\n            token_hash=sha256(raw_token.encode()).hexdigest(),\n            expires_at=now() + self.TTL,\n        )\n        return raw_token  # only this ever goes in the email</pre><p class='muted'><code>accounts/routes.py</code></p><p>The route that sends it:</p><pre>@app.post('/signup')\ndef signup(email, password):\n    user = create_user(email, password, verified=False)\n    token = token_service.create_for(user)\n    mailer.send_verification_email(user.email, token)\n    return {'id': user.id}</pre><p>And verification itself:</p><pre>@app.get('/verify-email')\ndef verify_email(token):\n    row = db.verification_tokens.find_by(\n        token_hash=sha256(token.encode()).hexdigest()\n    )\n    if row is None or row.expires_at &lt; now():\n        return Response(400, 'This link is invalid or has expired.')\n\n    mark_user_verified(row.user_id)\n    db.verification_tokens.delete(row.id)  # single-use\n    return Response(200, 'Email verified.')</pre><p>Note the lookup hashes the incoming token and compares hashes — the raw token is never stored, so a database read alone can't produce a usable link.</p>"
+    },
+    {
+      "id": "edge-cases",
+      "heading": "Edge cases & security",
+      "summary": "Four things this design deliberately guards against: reusing a token after it's been consumed, letting an expired link keep working, mail-bombing someone else's inbox via resend, and accumulating unverified accounts forever.",
+      "body": "<p><strong>Reuse.</strong> The token row is deleted on success, so clicking the same link a second time gets the same invalid-or-expired response as a token that never existed. This also covers a forwarded or leaked email — it only works until the legitimate user clicks it once.</p><p><strong>Expiry.</strong> Checked before anything else happens. A 24-hour window is generous enough for a real user, short enough to bound the damage from a stale email sitting in an old inbox.</p><p class='muted'><code>accounts/routes.py</code></p><pre>@app.post('/resend-verification')\n@rate_limit('3/hour', key=lambda req: req.json.get('email'))\ndef resend_verification(user):\n    if user.verified:\n        return Response(400, 'Already verified.')\n    token = token_service.create_for(user)  # old tokens still expire on their own\n    mailer.send_verification_email(user.email, token)\n    return Response(200, 'Verification email sent.')</pre><p><strong>Resend abuse.</strong> The rate limit is keyed by the account being verified, not the caller's IP — the whole point is that anyone can type someone else's address into the sign-up form, and the limit has to protect that inbox regardless of who's asking.</p><p><strong>Unverified accounts piling up.</strong> Out of scope for this PR, but a follow-up scheduled job removes never-verified accounts older than 30 days, so abandoned sign-ups don't accumulate indefinitely.</p>"
+    }
+  ],
+  "quiz": [
+    {
+      "prompt": "What state is an account in immediately after POST /signup succeeds?",
+      "options": [
+        {"text": "Fully active with no restrictions", "correct": false},
+        {"text": "Not created until the email link is clicked", "correct": false},
+        {"text": "Created, but limited until the email is verified", "correct": true},
+        {"text": "Pending manual approval by an admin", "correct": false}
+      ],
+      "explanation": "The account exists right away — verification lifts a restriction rather than gating creation itself."
+    },
+    {
+      "prompt": "Why does verify_email hash the incoming token before looking it up?",
+      "options": [
+        {"text": "Hashing makes the lookup query faster", "correct": false},
+        {"text": "Because the raw token was never stored — only its hash was, at creation time — so the same transformation has to be applied to compare them", "correct": true},
+        {"text": "To shorten the token for the URL", "correct": false},
+        {"text": "It's required by the email provider", "correct": false}
+      ],
+      "explanation": "Storing only the hash means a database read can't yield a working token; verifying requires re-hashing whatever the client presents."
+    },
+    {
+      "prompt": "A user clicks a valid verification link twice (say, a double-click, or opening the email again later). What happens the second time?",
+      "options": [
+        {"text": "The account is verified again with no issue", "correct": false},
+        {"text": "It fails, because the token was deleted after the first successful use", "correct": true},
+        {"text": "It sends a new verification email automatically", "correct": false},
+        {"text": "It un-verifies the account", "correct": false}
+      ],
+      "explanation": "Deleting the token on success makes it single-use — the second click finds no matching row."
+    },
+    {
+      "prompt": "Why is the resend rate limit keyed by the account being verified, not by the IP address making the request?",
+      "options": [
+        {"text": "IP-based limits are harder to implement", "correct": false},
+        {"text": "Because the attack this guards against is spamming someone else's inbox, regardless of which IP the attacker uses", "correct": true},
+        {"text": "Accounts don't have IP addresses", "correct": false},
+        {"text": "To make the limit stricter for mobile users", "correct": false}
+      ],
+      "explanation": "The victim is the inbox receiving repeated emails, not any particular requester, so the limit has to track the target account."
+    },
+    {
+      "prompt": "What handles accounts that sign up but never click the verification link?",
+      "options": [
+        {"text": "They stay limited forever with no further action", "correct": false},
+        {"text": "A separate scheduled cleanup job removes accounts that stay unverified past a set age", "correct": true},
+        {"text": "The token's expiry automatically deletes the account", "correct": false},
+        {"text": "They're verified automatically after 30 days", "correct": false}
+      ],
+      "explanation": "Token expiry only invalidates the link, not the account; a separate cleanup job is what prevents abandoned sign-ups from accumulating."
+    }
+  ]
+}
