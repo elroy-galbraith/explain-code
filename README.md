@@ -58,7 +58,7 @@ Open `sample.html` in a browser. Only the Python 3 standard library is required.
 Built from [Geoffrey Litt](https://github.com/geoffreylitt)'s
 [explain-diff gist](https://gist.github.com/geoffreylitt/a29df1b5f9865506e8952488eac3d524),
 a prompt for turning a diff into a self-contained HTML explainer with a quiz.
-This plugin extends that idea to whole features, modules, and codebases (not
+This skill extends that idea to whole features, modules, and codebases (not
 just diffs), and adds a Python-rendered HTML/CSS/JS pipeline and shuffled quiz
 answers on top.
 
