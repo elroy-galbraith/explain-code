@@ -100,6 +100,43 @@ def _matches_any(path, patterns):
 # --------------------------------------------------------------------------- #
 
 _BRACE_RENAME_RE = re.compile(r"^(.*)\{(.*) => (.*)\}(.*)$")
+_GIT_SIMPLE_ESCAPES = {
+    '"': '"', "\\": "\\", "a": "\a", "b": "\b",
+    "f": "\f", "n": "\n", "r": "\r", "t": "\t", "v": "\v",
+}
+
+
+def _unquote_git_path(raw):
+    """Undo git's C-style path quoting (the core.quotePath default).
+
+    git wraps a path in double quotes and backslash-escapes it when the
+    path has a double quote, a backslash, or any non-ASCII/control byte
+    (each such byte becomes a \\NNN octal escape). Escapes are per-byte, and
+    a multi-byte UTF-8 character shows up as several consecutive \\NNN
+    escapes, so this decodes to raw bytes first and only decodes as UTF-8 at
+    the end, rather than mapping each escape to a character on its own.
+    """
+    if len(raw) < 2 or raw[0] != '"' or raw[-1] != '"':
+        return raw
+    inner = raw[1:-1]
+    out = bytearray()
+    i, n = 0, len(inner)
+    while i < n:
+        c = inner[i]
+        if c == "\\" and i + 1 < n:
+            nxt = inner[i + 1]
+            if nxt in _GIT_SIMPLE_ESCAPES:
+                out.extend(_GIT_SIMPLE_ESCAPES[nxt].encode("ascii"))
+                i += 2
+                continue
+            octal = inner[i + 1:i + 4]
+            if len(octal) == 3 and all(ch in "01234567" for ch in octal):
+                out.append(int(octal, 8))
+                i += 4
+                continue
+        out.extend(c.encode("utf-8"))
+        i += 1
+    return out.decode("utf-8", errors="replace")
 
 
 def _resolve_numstat_path(raw):
@@ -112,7 +149,11 @@ def _resolve_numstat_path(raw):
     m = _BRACE_RENAME_RE.match(raw)
     if m:
         prefix, _old, new, suffix = m.groups()
-        return f"{prefix}{new}{suffix}"
+        # When a whole path segment is added/removed (e.g. the brace's old
+        # or new side is empty, as in `dir/{sub => }/file.txt`), naive
+        # concatenation leaves a double or leading slash. Normalize it away.
+        resolved = f"{prefix}{new}{suffix}"
+        return "/".join(part for part in resolved.split("/") if part)
     if " => " in raw:
         return raw.split(" => ", 1)[1].strip()
     return raw
@@ -133,7 +174,7 @@ def parse_numstat(text):
         if len(parts) != 3:
             continue
         added, _deleted, raw_path = parts
-        path = _resolve_numstat_path(raw_path.strip())
+        path = _resolve_numstat_path(_unquote_git_path(raw_path.strip()))
         added_n = int(added) if added.strip().isdigit() else 0
         files.append((added_n, path))
     return files
@@ -251,6 +292,8 @@ def main(argv=None):
 
     policy_text = Path(args.policy).read_text(encoding="utf-8")
     policy = yaml.safe_load(policy_text) or {}
+    if not isinstance(policy, dict):
+        sys.exit(f"evaluate_policy.py: {args.policy} must be a YAML mapping, not {type(policy).__name__}.")
 
     diff_text = (
         Path(args.diff).read_text(encoding="utf-8")
