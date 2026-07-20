@@ -29,7 +29,19 @@ python3 skills/explain-code/scripts/render.py spec.json -o out.html
 
 See `skills/explain-code/SKILL.md` for the full spec schema and
 `skills/explain-code/scripts/sample_spec.json` for a worked example.
+`SKILL.md` also has a "When to use this skill" section covering what should
+and shouldn't trigger an explanation.
 
 ## Requirements
 
 Python 3 standard library only. No packages to install.
+
+## CI policy (when to auto-trigger)
+
+The skill knows *what* to explain; it doesn't hardcode *when* to run
+automatically. That's a separate policy layer in `policy/`:
+`policy/explain-code-policy.yml` defines critical paths, size thresholds, and
+ignore rules, `policy/evaluate_policy.py` evaluates a diff against it, and
+`policy/README.md` explains the one-sentence rule behind it. See
+`.github/workflows/explain-code-policy.yml` at the repo root for how it's
+wired into pull requests.

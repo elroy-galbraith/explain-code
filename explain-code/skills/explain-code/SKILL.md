@@ -18,6 +18,44 @@ JavaScript, answer-shuffling, and page scaffolding. This keeps output consistent
 and saves your tokens for the parts that actually change from one explanation to
 the next.
 
+## When to use this skill
+
+What the change **touches** is the strongest signal — stronger than how big it
+is. Use this skill when:
+
+- The change touches a **critical path**: auth, payments/billing,
+  permissions/access control, data migrations, or pricing/business rules —
+  regardless of how small the diff looks. A one-line permission check is
+  exactly the kind of change worth explaining.
+- The change is **large and structural, spanning multiple modules**. Treat size
+  as a secondary signal only — never trigger on size alone, and don't count
+  lines from lockfiles or generated code, which are noise.
+- Someone **explicitly asks** for a walkthrough: onboarding a new hire,
+  explaining a subsystem, preparing sign-off on a feature.
+
+Skip it — generating here is a speedbump, not a value-add — for mechanical
+diffs: formatting-only changes, renames, lockfile/dependency bumps, generated
+code, comment-only changes, test-fixture-only changes, and otherwise-trivial
+changes to non-critical paths.
+
+Two things make this loose framing safe rather than sloppy:
+
+- **The test-first gate is the safety valve.** Even when you do generate, an
+  expert reviewer clears the gate in about 30 seconds and never opens the deep
+  content. A false trigger costs 30 seconds; a missed trigger risks someone
+  shipping critical code they didn't understand. That asymmetry is why you
+  should err toward generating on critical paths rather than holding back.
+- **Audience is a depth knob, not a trigger gate.** Whether the reader is a
+  junior engineer, a senior engineer, or a non-technical stakeholder changes
+  how much they lean on `body` versus `summary` — it does not change whether
+  you generate. Don't restrict who gets an explanation by seniority; let the
+  gate self-select instead.
+
+This skill defines *what* to explain. *When* to trigger it automatically — the
+hard thresholds an LLM shouldn't be asked to compute, like line counts and path
+globs — is a separate policy decision; see `explain-code/policy/` for the CI
+policy that encodes it.
+
 ## Design goals (why the format is shaped this way)
 
 1. **Fast by default, deep on demand.** A PR reviewer should get the gist in
