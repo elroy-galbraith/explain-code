@@ -1,0 +1,107 @@
+{
+  "title": "Token-bucket rate limiter for the auth API",
+  "subtitle": "PR #482 · auth-service",
+  "slug": "2026-07-20-rate-limiter",
+  "gate": [
+    {
+      "prompt": "In a token-bucket limiter, what does the bucket 'refill rate' control?",
+      "options": [
+        {"text": "The sustained request rate allowed over time", "correct": true},
+        {"text": "The maximum burst allowed in a single instant", "correct": false},
+        {"text": "How long a blocked client must wait before retrying", "correct": false},
+        {"text": "The total number of clients the service can track", "correct": false}
+      ],
+      "explanation": "Refill rate sets the long-run steady-state throughput; bucket capacity sets the burst."
+    },
+    {
+      "prompt": "Why store the bucket state in Redis rather than in process memory?",
+      "options": [
+        {"text": "Redis is faster than local memory for this", "correct": false},
+        {"text": "So the limit is shared consistently across all service instances", "correct": true},
+        {"text": "Redis encrypts the counters automatically", "correct": false}
+      ],
+      "explanation": "Per-instance memory would let a client exceed the global limit by hitting different pods."
+    },
+    {
+      "prompt": "What happens when a bucket is empty and a request arrives?",
+      "options": [
+        {"text": "The request is queued until the next refill tick", "correct": false},
+        {"text": "The request is rejected with 429 Too Many Requests", "correct": true},
+        {"text": "The bucket capacity is temporarily doubled", "correct": false}
+      ],
+      "explanation": "Empty bucket means no tokens to spend, so the request is refused with 429."
+    }
+  ],
+  "sections": [
+    {
+      "id": "background",
+      "heading": "Background",
+      "summary": "The auth API had no rate limiting, so a single misbehaving client could exhaust database connections for everyone. This PR adds a shared, per-client token-bucket limiter backed by Redis.",
+      "body": "<p>Before this change, every request to <code>/auth/login</code> hit the user database directly with no throttle. During the March incident a retry storm from one mobile build opened thousands of connections and starved the pool.</p><pre>client -> auth-service -> user-db   (no limiter)</pre><p>The fix introduces a limiter between the handler and the database.</p>"
+    },
+    {
+      "id": "intuition",
+      "heading": "Intuition",
+      "summary": "Picture a bucket that holds tokens. Each request spends one token; the bucket refills at a fixed rate. Bursts are fine until the bucket runs dry, then requests get a 429.",
+      "body": "<p>A token bucket has two knobs: <strong>capacity</strong> (how big a burst you tolerate) and <strong>refill rate</strong> (sustained throughput). A client can spend a whole bucket at once, but then must wait for refills.</p><pre>capacity = 20 tokens\nrefill   = 5 tokens/sec\n\n[####################] full  -> burst of 20 ok\n[                    ] empty -> next request = 429</pre>"
+    },
+    {
+      "id": "code",
+      "heading": "The code",
+      "summary": "A new RateLimiter class wraps Redis with an atomic Lua script that refills and decrements in one round trip. The login handler calls allow(clientId) and returns 429 on refusal.",
+      "body": "<p>The core is an atomic check-and-decrement so two concurrent requests can't both spend the last token:</p><pre>result = redis.eval(TOKEN_BUCKET_LUA, key=client_id)\nif result.allowed:\n    proceed()\nelse:\n    return Response(429, retry_after=result.retry_after)</pre><p>Doing the refill math inside the Lua script keeps it race-free across instances.</p>"
+    }
+  ],
+  "quiz": [
+    {
+      "prompt": "Where is the bucket state kept so the limit holds across instances?",
+      "options": [
+        {"text": "In each pod's local memory", "correct": false},
+        {"text": "In Redis", "correct": true},
+        {"text": "In the user database", "correct": false},
+        {"text": "In a signed cookie on the client", "correct": false}
+      ],
+      "explanation": "Redis gives all instances one shared view of each client's bucket."
+    },
+    {
+      "prompt": "Why is the refill-and-decrement done in a Lua script?",
+      "options": [
+        {"text": "To make it atomic so concurrent requests can't double-spend the last token", "correct": true},
+        {"text": "Because Redis cannot store integers otherwise", "correct": false},
+        {"text": "To encrypt the token counts", "correct": false},
+        {"text": "To avoid needing a Redis connection", "correct": false}
+      ],
+      "explanation": "One atomic round trip prevents the check-then-act race."
+    },
+    {
+      "prompt": "A client sends 20 requests instantly against a full 20-token bucket. What happens?",
+      "options": [
+        {"text": "All 20 succeed; the bucket is then empty", "correct": true},
+        {"text": "Only the first is allowed; the rest 429", "correct": false},
+        {"text": "All 20 are queued and released one per second", "correct": false},
+        {"text": "The bucket rejects all 20 as a burst", "correct": false}
+      ],
+      "explanation": "Capacity is 20, so a full bucket absorbs a 20-request burst, then sits empty until refill."
+    },
+    {
+      "prompt": "What status code does a refused request receive?",
+      "options": [
+        {"text": "503 Service Unavailable", "correct": false},
+        {"text": "429 Too Many Requests", "correct": true},
+        {"text": "403 Forbidden", "correct": false},
+        {"text": "409 Conflict", "correct": false}
+      ],
+      "explanation": "429 is the standard 'you are being rate limited' response."
+    },
+    {
+      "prompt": "Which knob controls sustained throughput rather than burst size?",
+      "options": [
+        {"text": "Bucket capacity", "correct": false},
+        {"text": "Refill rate", "correct": true},
+        {"text": "The Redis key TTL", "correct": false},
+        {"text": "The Lua script length", "correct": false}
+      ],
+      "explanation": "Refill rate = steady-state rate; capacity = burst allowance."
+    }
+  ]
+}

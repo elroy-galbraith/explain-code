@@ -1,0 +1,16 @@
+{
+  "name": "explain-diff-marketplace",
+  "owner": {
+    "name": "Elroy Galbraith"
+  },
+  "metadata": {
+    "description": "Tools for explaining code changes to reviewers and new hires."
+  },
+  "plugins": [
+    {
+      "name": "explain-diff",
+      "source": "./explain-diff",
+      "description": "Explain a code change as a self-contained HTML page with a test-first gate, brief-by-default sections, and a shuffled quiz."
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "explain-diff",
+  "version": "0.1.0",
+  "description": "Explain a code change, diff, branch, or PR as a single self-contained HTML page with a test-first comprehension gate, brief-by-default sections that expand on demand, and a shuffled quiz. Fast for PR review, deep enough for onboarding.",
+  "author": {
+    "name": "Elroy Galbraith"
+  },
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "pull-request",
+    "diff",
+    "onboarding",
+    "documentation",
+    "html"
+  ]
+}
