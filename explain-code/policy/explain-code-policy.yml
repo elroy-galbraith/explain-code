@@ -1,0 +1,72 @@
+# explain-code CI policy
+#
+# One-sentence rule: auto-generate on critical-path changes; one-click
+# opt-in otherwise; skip mechanical diffs.
+#
+# This file is the WHEN layer. It is read by evaluate_policy.py (and the
+# GitHub Actions workflow that wraps it) — never by the skill itself. The
+# skill (SKILL.md) only knows WHAT to explain; it deliberately has no
+# numeric thresholds baked in, because an LLM can't reliably compute
+# "is 340 lines a lot?" and doesn't know who's reading. See README.md in
+# this directory for the full rationale and tuning guide.
+
+# ---------------------------------------------------------------------------
+# 1. critical_paths — the strongest signal. A single changed file matching
+#    one of these globs forces generation, REGARDLESS of how small the diff
+#    is. These are placeholders — edit them to match how YOUR repo is laid
+#    out. Examples for a more specific / nested layout:
+#
+#      critical_paths:
+#        - "src/auth/**"
+#        - "services/payments/**"
+#        - "**/kyc/**"
+#        - "infra/iam/**"
+#        - "db/migrations/**"
+#
+#    Glob syntax: "**" matches zero or more path segments, "*" matches
+#    within one segment. A pattern with a "/" in it is anchored from the
+#    repo root unless it starts with "**/" (same convention GitHub Actions
+#    itself uses for `paths:` filters). A pattern with no "/" at all (like
+#    `package-lock.json` below) matches that filename at any depth.
+# ---------------------------------------------------------------------------
+critical_paths:
+  - "auth/**"
+  - "billing/**"
+  - "payments/**"
+  - "migrations/**"
+  - "permissions/**"
+  - "pricing/**"
+
+# ---------------------------------------------------------------------------
+# 2. size — a weak, noisy secondary signal. Demoted on purpose: size alone
+#    NEVER triggers generation. It only counts when require_multi_module is
+#    also satisfied, i.e. "large AND spans multiple modules." Lines from
+#    ignore_paths (below) are excluded before either number is computed, so
+#    a lockfile bump can't masquerade as a large, multi-module change.
+#
+#      added_lines_threshold  — added-line count that counts as "large."
+#      min_modules             — how many distinct modules counts as
+#                                 "multiple" (module = top-level path
+#                                 segments; see evaluate_policy.py).
+#      require_multi_module    — keep this true. If false, size alone would
+#                                 trigger generation, which contradicts the
+#                                 "size is a weak proxy" rule this policy
+#                                 exists to encode.
+# ---------------------------------------------------------------------------
+size:
+  added_lines_threshold: 300
+  min_modules: 2
+  require_multi_module: true
+
+# ---------------------------------------------------------------------------
+# 3. ignore_paths — mechanical diffs that should never force generation and
+#    should never count toward the size/module numbers above, even when the
+#    file happens to sit under a critical_paths glob (e.g. generated code
+#    inside auth/ is still skipped — nobody reasoned about it by hand).
+# ---------------------------------------------------------------------------
+ignore_paths:
+  - "**/*.lock"
+  - "package-lock.json"
+  - "**/generated/**"
+  - "**/__snapshots__/**"
+  - "**/*.min.*"

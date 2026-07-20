@@ -1,0 +1,113 @@
+name: explain-code policy check
+
+# Evaluates each PR diff against explain-code/policy/explain-code-policy.yml
+# and, when it matches, leaves a PR comment saying so (and why). This
+# workflow only evaluates WHEN to generate — it does not call an LLM and
+# does not generate the explanation itself. See explain-code/policy/README.md.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: explain-code-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Diff PR against base
+        run: |
+          git diff --numstat \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            > pr.numstat
+
+      - name: Evaluate explain-code policy
+        run: |
+          python3 explain-code/policy/evaluate_policy.py \
+            --policy explain-code/policy/explain-code-policy.yml \
+            --diff pr.numstat \
+            --pretty | tee policy-decision.json
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const decision = JSON.parse(fs.readFileSync('policy-decision.json', 'utf8'));
+            const marker = '<!-- explain-code-policy -->';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (!decision.generate) {
+              // Diff no longer matches (e.g. a follow-up push removed the
+              // critical-path touch) -- remove any stale comment instead of
+              // leaving outdated advice around.
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+
+            const criticalFiles = Object.keys(decision.matched_critical_paths || {});
+            const signal = criticalFiles.length
+              ? `**Critical paths touched:** ${criticalFiles.map(p => '`' + p + '`').join(', ')}`
+              : `**Size:** ${decision.added_lines_considered} added lines across modules: ${decision.modules_touched.join(', ') || 'none'}`;
+
+            const body = [
+              marker,
+              '### explain-code policy: this PR matches the auto-generate criteria',
+              '',
+              decision.reason,
+              '',
+              signal,
+              '',
+              'Ask Claude to explain this PR (the `explain-code` skill) and attach or link ' +
+                'the resulting HTML here. This comment only reports the policy decision -- ' +
+                'see `explain-code/policy/README.md` for how WHAT to explain and WHEN to ' +
+                'trigger it are kept separate.',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

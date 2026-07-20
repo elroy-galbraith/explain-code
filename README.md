@@ -35,11 +35,15 @@ app by dropping it into a chat.
 .claude-plugin/marketplace.json     # marketplace manifest
 explain-code/                       # the plugin
 ├── .claude-plugin/plugin.json      # plugin manifest
-└── skills/explain-code/
-    ├── SKILL.md                    # the skill instructions
-    └── scripts/
-        ├── render.py               # JSON spec -> HTML renderer
-        └── sample_spec.json        # worked example
+├── skills/explain-code/
+│   ├── SKILL.md                    # the skill instructions (the WHAT)
+│   └── scripts/
+│       ├── render.py               # JSON spec -> HTML renderer
+│       └── sample_spec.json        # worked example
+└── policy/                         # CI policy for auto-triggering (the WHEN)
+    ├── explain-code-policy.yml     # critical paths / size / ignore rules
+    ├── evaluate_policy.py          # standalone policy evaluator
+    └── README.md                   # the one-sentence rule, explained
 ```
 
 ## Try the renderer directly
