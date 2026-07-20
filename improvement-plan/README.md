@@ -1,7 +1,7 @@
 # improvement-plan
 
 Draft a layered, plain-English improvement plan for non-technical or mixed
-audiences — product, C-suite, leadership, FRA, customer success, non-native
+audiences — product, C-suite, leadership, finance, customer success, non-native
 English readers.
 
 ## Design

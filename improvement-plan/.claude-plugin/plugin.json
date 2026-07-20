@@ -1,7 +1,7 @@
 {
   "name": "improvement-plan",
   "version": "0.1.0",
-  "description": "Draft a layered, plain-English improvement plan for non-technical or mixed audiences -- product, C-suite, leadership, FRA, customer success, non-native English readers. Orders interventions cheapest-first, sets honest expectations, and ends with explicit stakeholder asks.",
+  "description": "Draft a layered, plain-English improvement plan for non-technical or mixed audiences -- product, C-suite, leadership, finance, customer success, non-native English readers. Orders interventions cheapest-first, sets honest expectations, and ends with explicit stakeholder asks.",
   "author": {
     "name": "Elroy Galbraith"
   },

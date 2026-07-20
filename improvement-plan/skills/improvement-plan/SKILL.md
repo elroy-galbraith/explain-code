@@ -1,6 +1,6 @@
 ---
 name: improvement-plan
-description: Draft a layered, plain-English improvement plan for non-technical or mixed audiences (product, C-suite, leadership, FRA, customer success, non-native English readers). Use when the user asks to "draft a plan", "write an improvement plan", "create a roadmap for leadership", "communicate this work to product / C-suite / stakeholders", or "translate this technical finding into a plan". Output is a Notion-ready or markdown document that orders interventions cheapest-first, sets honest expectations, and ends with explicit stakeholder asks.
+description: Draft a layered, plain-English improvement plan for non-technical or mixed audiences (product, C-suite, leadership, finance, customer success, non-native English readers). Use when the user asks to "draft a plan", "write an improvement plan", "create a roadmap for leadership", "communicate this work to product / C-suite / stakeholders", or "translate this technical finding into a plan". Output is a Notion-ready or markdown document that orders interventions cheapest-first, sets honest expectations, and ends with explicit stakeholder asks.
 ---
 
 # Improvement Plan Writer
@@ -31,7 +31,7 @@ Trigger on requests like:
 
 Confirm with the user (or infer from explicit context):
 
-- **Who reads this?** Engineering, product, leadership, customers, FRA, mixed?
+- **Who reads this?** Engineering, product, leadership, customers, finance, mixed?
 - **Are non-native English speakers present?** If yes: avoid idioms, phrasal verbs, long sentences.
 - **What decision are they being asked to make?** Approve funding / prioritise / understand / external comms / something else?
 - **What context do they already have?** Anchor to existing docs rather than re-explaining.
@@ -135,7 +135,7 @@ The "What We Need from Stakeholders" and "Questions for Decision-Makers" section
 Good asks have a name on them or a measurable size:
 
 - "1 backend engineer, part-time, for 4–6 weeks"
-- "FRA team time, approximately 1 hour per week"
+- "Finance team time, approximately 1 hour per week"
 - "Are we agreed that approval recall is the primary metric to improve?"
 - "Is the 4–6 week timeline acceptable, or should we move faster (with higher risk)?"
 
