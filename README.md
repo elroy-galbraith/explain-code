@@ -26,8 +26,6 @@ In an interactive Claude Code / Cowork session:
 /plugin install explain-code@explain-code-marketplace
 ```
 
-(Replace `elroy-galbraith/explain-code` with wherever you host this repo.)
-
 You can also install the packaged `.plugin` file directly in the Cowork desktop
 app by dropping it into a chat.
 
