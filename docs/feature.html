@@ -248,7 +248,7 @@ def verify_email(token):
       <summary>Show the full walkthrough</summary>
       <div class="deep-body">
 <p><strong>Reuse.</strong> The token row is deleted on success, so clicking the same link a second time gets the same invalid-or-expired response as a token that never existed. This also covers a forwarded or leaked email — it only works until the legitimate user clicks it once.</p><p><strong>Expiry.</strong> Checked before anything else happens. A 24-hour window is generous enough for a real user, short enough to bound the damage from a stale email sitting in an old inbox.</p><p class='muted'><code>accounts/routes.py</code></p><pre>@app.post('/resend-verification')
-@rate_limit('3/hour', key=lambda req: req.user.id)
+@rate_limit('3/hour', key=lambda req: req.json.get('email'))
 def resend_verification(user):
     if user.verified:
         return Response(400, 'Already verified.')

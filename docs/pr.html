@@ -195,7 +195,7 @@
 <p><code>GET /notes</code> returns notes newest-first, one page at a time. Each page's response includes a <code>next_cursor</code> the client passes back to get the next page:</p><pre>GET /notes?limit=20
 → 20 notes, next_cursor = 'MjAyNi0wNy0xMFQwOTowMDowMFo='
 
-GET /notes?limit=20&cursor=MjAyNi0wNy0xMFQwOTowMDowMFo=
+GET /notes?limit=20&amp;cursor=MjAyNi0wNy0xMFQwOTowMDowMFo=
 → next 20 notes, next_cursor = '...'</pre><p>A user imported 40 notes from a backup in one batch. All 40 got the exact same <code>created_at</code> timestamp, because the import set it once for the whole batch. Several of those notes never showed up in the app, no matter which page the user loaded.</p>
       </div>
     </details>
@@ -223,7 +223,7 @@ LIMIT :limit</pre><p>After — a row-value (tuple) comparison, which most SQL da
 WHERE (created_at, id) &lt; (:cursor_created_at, :cursor_id)
 ORDER BY created_at DESC, id DESC
 LIMIT :limit</pre><p>The cursor returned to the client is now a base64 blob encoding both fields:</p><pre>def encode_cursor(note):
-    return b64encode(f'{note.created_at.isoformat()}|{note.id}'.encode())
+    return b64encode(f'{note.created_at.isoformat()}|{note.id}'.encode()).decode()
 
 def decode_cursor(cursor):
     ts, note_id = b64decode(cursor).decode().split('|')

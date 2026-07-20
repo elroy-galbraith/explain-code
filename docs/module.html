@@ -235,7 +235,7 @@ def worker_loop():
 def run_job(job):
     handler = HANDLERS[job.type]
     try:
-        handler(json.loads(job.payload))
+        handler(job)
         db.jobs.ack(job.id)
     except Exception:
         db.jobs.mark_failed_attempt(job.id)  # retry logic decides what happens next</pre><p>Notice there's no <code>finally</code>-block ack — acking only on the success path is what makes a crash mid-handler safe: the job just stays leased until the timeout, then becomes available again.</p>
@@ -256,11 +256,12 @@ def run_job(job):
     backoff = min(2 ** job.attempts, 300)  # seconds, capped at 5 minutes
     job.status = 'available'
     job.available_at = now() + timedelta(seconds=backoff)
-    job.save()</pre><p>The cap matters: uncapped exponential backoff on a job with a generous max_attempts could end up scheduled hours or days out, which is rarely what anyone wants for a job someone is actively waiting on.</p><p>Because a lease can expire and a job be redelivered, every handler needs to tolerate running more than once for the same input. The email handler doesn't track <em>have I sent this before</em> in memory — a second worker process wouldn't know about it — so it hands the email provider an idempotency key instead:</p><p class='muted'><code>jobs/handlers/email.py</code></p><pre>def send_email_handler(payload):
+    job.save()</pre><p>The cap matters: uncapped exponential backoff on a job with a generous max_attempts could end up scheduled hours or days out, which is rarely what anyone wants for a job someone is actively waiting on.</p><p>Because a lease can expire and a job be redelivered, every handler needs to tolerate running more than once for the same input. The email handler doesn't track <em>have I sent this before</em> in memory — a second worker process wouldn't know about it — so it hands the email provider an idempotency key instead:</p><p class='muted'><code>jobs/handlers/email.py</code></p><pre>def send_email_handler(job):
+    payload = json.loads(job.payload)
     email_provider.send(
         to=payload['to'],
         template=payload['template'],
-        idempotency_key=payload['job_id'],  # provider dedupes on this
+        idempotency_key=job.id,  # provider dedupes on this
     )</pre><p>If this same job gets redelivered and re-run, the provider recognizes the repeated idempotency key and skips sending a second email — the handler running twice is harmless. Jobs that only touch your own database can get the same property from a unique constraint (an insert-if-not-exists on the same key) instead of relying on a third party.</p>
       </div>
     </details>
