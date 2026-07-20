@@ -1,19 +1,22 @@
 ---
-name: explain-diff
-description: Use when the user asks for an explanation of a code change, diff, branch, or PR. Produces a single self-contained HTML page with an adaptive "test-first" gate, brief-by-default sections that expand on demand, and a shuffled comprehension quiz. Optimized for fast PR review while still supporting deep onboarding.
+name: explain-code
+description: Use when the user asks for an explanation of code — a change, diff, branch, or PR, but also a whole feature, a module, a subsystem, or an unfamiliar codebase. Triggers on phrases like "explain this PR", "explain how this feature works", "walk a new hire through this module", "help me understand this codebase". Produces a single self-contained HTML page with an adaptive "test-first" gate, brief-by-default sections that expand on demand, and a shuffled comprehension quiz. Fast for PR review, deep enough for onboarding.
 ---
 
-# explain-diff
+# explain-code
 
-Explain a code change as one self-contained HTML file. The reader opens it in a
-browser — no server, no account, nothing to install. If they want to keep it for
-onboarding they save the `.html`, print it to PDF, or drop it into a wiki/Notion
-page later.
+Explain a piece of code as one self-contained HTML file. "A piece of code" can be a
+single change (diff/branch/PR) or something larger — a whole feature, a module, a
+subsystem, or an unfamiliar codebase you're onboarding someone onto. The reader
+opens it in a browser — no server, no account, nothing to install. If they want to
+keep it they save the `.html`, print it to PDF, or drop it into a wiki/Notion page
+later.
 
 You do **not** hand-write the HTML. You gather the substance, emit a compact
 **JSON spec**, and run `scripts/render.py`, which owns all the CSS, quiz
 JavaScript, answer-shuffling, and page scaffolding. This keeps output consistent
-and saves your tokens for the parts that actually change per diff.
+and saves your tokens for the parts that actually change from one explanation to
+the next.
 
 ## Design goals (why the format is shaped this way)
 
@@ -33,9 +36,10 @@ and saves your tokens for the parts that actually change per diff.
 
 ## Workflow
 
-1. **Understand the change first.** Read the diff / PR / branch and whatever
-   surrounding code you need. Gather the real substance before writing anything.
-   Do not read `render.py` for content guidance — it is pure plumbing.
+1. **Understand the code first.** Read whatever you're explaining — the diff / PR /
+   branch, or the feature / module / subsystem / codebase — plus enough surrounding
+   code to get the real substance, before writing anything. Do not read
+   `render.py` for content guidance — it is pure plumbing.
 2. **Write the JSON spec** (schema below). This is where all your effort goes.
 3. **Render it.** `render.py` lives in this skill's own `scripts/` directory. Call
    it by its full path (this skill's directory is given to you when the skill
@@ -53,8 +57,8 @@ and saves your tokens for the parts that actually change per diff.
 
 ```json
 {
-  "title": "Human-readable title of the change",
-  "subtitle": "PR #482 · service-name",
+  "title": "Human-readable title of what's being explained",
+  "subtitle": "PR #482 · service-name   (or: 'Billing feature · payments-service')",
   "slug": "YYYY-MM-DD-short-name",
   "gate": [ /* 2-3 diagnostic questions */ ],
   "sections": [ /* the walkthrough */ ],
@@ -65,7 +69,7 @@ and saves your tokens for the parts that actually change per diff.
 ### `gate` — the test-first check (2-3 questions)
 
 The fast path. Ask the 2-3 questions that best separate "already understands this
-change" from "needs the walkthrough." Target the load-bearing ideas, not trivia.
+code" from "needs the walkthrough." Target the load-bearing ideas, not trivia.
 Same question shape as the quiz:
 
 ```json
@@ -85,10 +89,12 @@ be plausible, not filler. Order doesn't matter — it gets shuffled.
 
 ### `sections` — brief by default, deep on demand
 
-Aim for 3-4 sections. Good defaults, in order: **Background** (the existing system
-a newcomer needs), **Intuition** (the core idea via a concrete example or
-diagram), **The code** (a high-level, logically grouped walkthrough). Add or drop
-sections to fit the change.
+Aim for 3-4 sections (a little more is fine for a whole feature or codebase). Good
+defaults, in order: **Background** (the existing system a newcomer needs),
+**Intuition** (the core idea via a concrete example or diagram), **The code** (a
+high-level, logically grouped walkthrough). Add or drop sections to fit what you're
+explaining — a single diff may need three; a subsystem may warrant one per
+component.
 
 ```json
 {
@@ -108,7 +114,7 @@ the summary is not a teaser, it's a complete quick answer.
   flows with example data. (Inside a `<pre>` a small ASCII sketch is fine when it
   genuinely helps.)
 - Code in `<pre>` (it wraps and scrolls automatically). Show representative
-  snippets, not the whole diff.
+  snippets, not the whole diff or file.
 
 ### `quiz` — the confirmation (5 questions)
 

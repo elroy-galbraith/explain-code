@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-render.py — turn an explain-diff JSON spec into a single self-contained HTML page.
+render.py — turn an explain-code JSON spec into a single self-contained HTML page.
 
 Why this exists
 ---------------
 The CSS, quiz JavaScript, and page scaffolding are identical on every run of the
-explain-diff skill. Only the *content* (prose, diagrams, questions) changes per
-diff. Having the model hand-write the boilerplate each time wastes tokens and
-invites malformed-HTML bugs. So the model emits a compact JSON spec and this
-script renders it deterministically.
+explain-code skill. Only the *content* (prose, diagrams, questions) changes from
+one explanation to the next. Having the model hand-write the boilerplate each time
+wastes tokens and invites malformed-HTML bugs. So the model emits a compact JSON
+spec and this script renders it deterministically.
 
 It also owns two things the model is bad at:
   1. Answer-position shuffling. LLMs are poor RNGs and drift to the same slot.
@@ -393,7 +393,7 @@ def render(spec):
 # --------------------------------------------------------------------------- #
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Render an explain-diff JSON spec to HTML.")
+    ap = argparse.ArgumentParser(description="Render an explain-code JSON spec to HTML.")
     ap.add_argument("spec", help="Path to JSON spec, or '-' for stdin.")
     ap.add_argument("-o", "--output", help="Output HTML path (default: stdout).")
     args = ap.parse_args(argv)

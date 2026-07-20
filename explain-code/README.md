@@ -1,12 +1,14 @@
-# explain-diff
+# explain-code
 
-Explain a code change, diff, branch, or PR as a single self-contained HTML page.
+Explain code — a change (diff/branch/PR), a whole feature, a module, or an
+unfamiliar codebase — as a single self-contained HTML page.
 
 ## Design
 
 - **Test-first gate.** A 2–3 question diagnostic runs before the content. Pass it
   and the deep walkthrough stays collapsed — you go straight to the quiz. Miss one
-  and it expands automatically. Lets an experienced reviewer skip content honestly.
+  and it expands automatically. Lets someone who already knows the code skip it
+  honestly.
 - **Brief by default, deep on demand.** Each section shows a short summary always;
   the full walkthrough sits behind a toggle. One artifact for the 60-second review
   and the hour-long onboarding read.
@@ -18,15 +20,15 @@ Explain a code change, diff, branch, or PR as a single self-contained HTML page.
 
 ## Usage
 
-The skill triggers when you ask Claude to explain a diff/PR/branch. Under the hood
-it writes a JSON spec and runs:
+The skill triggers when you ask Claude to explain code — a diff, PR, feature,
+module, or codebase. Under the hood it writes a JSON spec and runs:
 
 ```bash
-python3 skills/explain-diff/scripts/render.py spec.json -o out.html
+python3 skills/explain-code/scripts/render.py spec.json -o out.html
 ```
 
-See `skills/explain-diff/SKILL.md` for the full spec schema and
-`skills/explain-diff/scripts/sample_spec.json` for a worked example.
+See `skills/explain-code/SKILL.md` for the full spec schema and
+`skills/explain-code/scripts/sample_spec.json` for a worked example.
 
 ## Requirements
 

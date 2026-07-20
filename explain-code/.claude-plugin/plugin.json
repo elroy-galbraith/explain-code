@@ -1,0 +1,18 @@
+{
+  "name": "explain-code",
+  "version": "0.1.0",
+  "description": "Explain code — a change/diff/PR, a whole feature, a module, or an unfamiliar codebase — as a single self-contained HTML page with a test-first comprehension gate, brief-by-default sections that expand on demand, and a shuffled quiz. Fast for PR review, deep enough for onboarding a new hire.",
+  "author": {
+    "name": "Elroy Galbraith"
+  },
+  "license": "MIT",
+  "keywords": [
+    "code-explanation",
+    "code-review",
+    "pull-request",
+    "onboarding",
+    "codebase",
+    "documentation",
+    "html"
+  ]
+}
