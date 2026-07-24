@@ -16,6 +16,11 @@
       "name": "improvement-plan",
       "source": "./improvement-plan",
       "description": "Draft a layered, plain-English improvement plan for non-technical or mixed audiences that orders interventions cheapest-first and ends with explicit stakeholder asks."
+    },
+    {
+      "name": "humanizer",
+      "source": "./humanizer",
+      "description": "Remove signs of AI-generated writing from text (em-dash overuse, rule-of-three, promotional language, AI vocabulary, filler, hedging) so prose reads as natural and human. Vendored from blader/humanizer (MIT); pairs with improvement-plan as a final language pass."
     }
   ]
 }
