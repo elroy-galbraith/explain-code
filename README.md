@@ -1,7 +1,7 @@
 # explain-code marketplace
 
-A small Claude Code / Cowork plugin marketplace with two plugins: **explain-code**
-and **improvement-plan**.
+A small Claude Code / Cowork plugin marketplace with three plugins: **explain-code**,
+**improvement-plan**, and **humanizer**.
 
 `explain-code` turns a piece of code — a change (diff/branch/PR), a whole feature,
 a module, or an unfamiliar codebase — into a single self-contained HTML page
@@ -26,6 +26,13 @@ visibly honest about uncertainty (small samples, rough estimates, external
 dependencies), and always ends with explicit, sized asks for stakeholders
 rather than just a description of the work.
 
+`humanizer` is a language-cleanup pass. It strips the tells that make prose read
+as AI-generated (em-dash overuse, rule-of-three padding, promotional adjectives,
+"AI vocabulary", filler, and hedging), based on Wikipedia's "Signs of AI writing"
+guide. It works on its own on any text, and `improvement-plan` calls it as a final
+pass so plans land in plain, human language for non-technical and non-native
+readers.
+
 ## Install
 
 In an interactive Claude Code / Cowork session:
@@ -34,6 +41,7 @@ In an interactive Claude Code / Cowork session:
 /plugin marketplace add elroy-galbraith/explain-code
 /plugin install explain-code@explain-code-marketplace
 /plugin install improvement-plan@explain-code-marketplace
+/plugin install humanizer@explain-code-marketplace
 ```
 
 You can also install the packaged `.plugin` file directly in the Cowork desktop
@@ -58,6 +66,12 @@ improvement-plan/                   # the improvement-plan plugin
 ├── .claude-plugin/plugin.json      # plugin manifest
 └── skills/improvement-plan/
     └── SKILL.md                    # the skill instructions (structure, language rules, skeleton)
+humanizer/                          # the humanizer plugin (vendored from blader/humanizer, MIT)
+├── .claude-plugin/plugin.json      # plugin manifest
+├── skills/humanizer/
+│   └── SKILL.md                    # the skill instructions (33 AI-writing tells + fixes)
+├── LICENSE                         # upstream MIT license (© Siqi Chen)
+└── README.md                       # provenance, standalone use, improvement-plan pairing
 ```
 
 ## Try the explain-code renderer directly
@@ -79,6 +93,12 @@ a prompt for turning a diff into a self-contained HTML explainer with a quiz.
 This skill extends that idea to whole features, modules, and codebases (not
 just diffs), and adds a Python-rendered HTML/CSS/JS pipeline and shuffled quiz
 answers on top.
+
+`humanizer` is vendored from [blader](https://github.com/blader)'s
+[humanizer](https://github.com/blader/humanizer) skill (v2.9.1, MIT, © Siqi Chen),
+which is based on [Wikipedia's "Signs of AI writing"](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
+guide maintained by WikiProject AI Cleanup. The copy under `humanizer/` tracks
+that upstream; update it from there rather than editing the patterns in place.
 
 ## License
 
