@@ -1,0 +1,96 @@
+name: sync third-party plugins
+
+# Watches every third-party plugin in .claude-plugin/marketplace.json (a github
+# source pinned to a stable semver tag) and opens a draft PR when its upstream
+# publishes a newer tag, bumping the pinned `ref`. Plugins authored in this repo
+# (local "./path" sources) and branch/SHA pins are ignored -- the detection
+# lives in .github/scripts/check_plugin_updates.py.
+#
+# Two things to know:
+#   1. Scheduled runs only fire from the workflow file on the default branch, so
+#      this activates once merged. Use "Run workflow" (workflow_dispatch) to try
+#      it on demand.
+#   2. PR creation uses GITHUB_TOKEN, which requires Settings -> Actions ->
+#      General -> Workflow permissions -> "Allow GitHub Actions to create and
+#      approve pull requests" to be enabled. PRs opened by GITHUB_TOKEN do not
+#      themselves trigger other workflows (e.g. the policy check) -- expected for
+#      bot PRs; review the upstream diff linked in the PR body before merging.
+
+on:
+  schedule:
+    - cron: "17 7 * * 1"   # Mondays, 07:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-third-party-plugins
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Detect available updates
+        id: detect
+        run: |
+          python3 .github/scripts/check_plugin_updates.py \
+            --marketplace .claude-plugin/marketplace.json --json > updates.json
+          echo "updates.json:"; cat updates.json; echo
+          echo "count=$(jq 'length' updates.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Open a draft PR for each update
+        if: steps.detect.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          base="${GITHUB_REF_NAME}"
+
+          jq -c '.[]' updates.json | while read -r row; do
+            name=$(jq -r '.name'        <<<"$row")
+            repo=$(jq -r '.repo'        <<<"$row")
+            current=$(jq -r '.current_ref' <<<"$row")
+            latest=$(jq -r '.latest_ref'   <<<"$row")
+            branch="sync/${name}-${latest}"
+
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              echo "Branch $branch already exists; skipping ${name}."
+              continue
+            fi
+
+            git checkout -B "$branch" "origin/${base}"
+            python3 .github/scripts/check_plugin_updates.py \
+              --marketplace .claude-plugin/marketplace.json --apply "$name" --ref "$latest"
+            git add .claude-plugin/marketplace.json
+            git commit -m "Bump ${name} to ${latest}" \
+              -m "Upstream ${repo} published ${latest} (pinned ref was ${current}). Updates the github source ref in .claude-plugin/marketplace.json so installs and /plugin update track the new release."
+            git push -u origin "$branch"
+
+            # No backticks in the body: this is a double-quoted bash string.
+            gh pr create --base "$base" --head "$branch" --draft \
+              --title "Bump ${name} to ${latest}" \
+              --body "Automated by the \"sync third-party plugins\" workflow.
+
+          Upstream ${repo} published ${latest} (this marketplace pinned ${current}).
+
+          This bumps the pinned ref in the plugin's github source in .claude-plugin/marketplace.json. Review the upstream changes before merging:
+          https://github.com/${repo}/compare/${current}...${latest}
+
+          After merge, users take the update with:
+
+              /plugin marketplace update explain-code-marketplace
+              /plugin update ${name}@explain-code-marketplace"
+          done
