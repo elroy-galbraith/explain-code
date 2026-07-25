@@ -96,6 +96,15 @@ This three-line pattern is scannable and gives readers a complete mental model o
 - Single-number predictions — use ranges to convey uncertainty: "15–25 percentage points", not "20 points".
 - Mealy hedging — "could potentially maybe perhaps" reads as evasive. Be honest about uncertainty without being soggy.
 
+**Final pass — run the `humanizer` skill over the draft.** Once the prose is written, run the **humanizer** skill (also in this marketplace) in its *embedded mode* over the plan text as a last language pass. It enforces many of the rules above automatically: it cuts em dashes, rule-of-three padding, "AI vocabulary", filler phrases, and excessive hedging — exactly the tells that make a plan read as machine-written to a non-technical or non-native audience.
+
+Two constraints when you run it:
+
+- **Tell-removal, not voice.** A stakeholder plan wants the neutral, plain register. Do not let humanizer's personality/voice behaviour add opinions or first person; embedded mode over plan prose already keeps it off.
+- **Complement, don't replace.** Humanizer does not add the things this skill requires — counts in parentheses ("9.5% (2 of 21)"), inline-defined jargon, or forecast ranges. Keep those; humanizer only removes tells, it does not supply this structure.
+
+If the humanizer skill is not installed, skip this pass and apply the rules above by hand.
+
 ### Step 7 — Be visibly honest about uncertainty
 
 Always include a "Caveats" or "Important Caveat" section. Specifically:

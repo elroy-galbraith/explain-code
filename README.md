@@ -1,7 +1,7 @@
 # explain-code marketplace
 
-A small Claude Code / Cowork plugin marketplace with two plugins: **explain-code**
-and **improvement-plan**.
+A small Claude Code / Cowork plugin marketplace with three plugins: **explain-code**,
+**improvement-plan**, and **humanizer**.
 
 `explain-code` turns a piece of code — a change (diff/branch/PR), a whole feature,
 a module, or an unfamiliar codebase — into a single self-contained HTML page
@@ -26,6 +26,13 @@ visibly honest about uncertainty (small samples, rough estimates, external
 dependencies), and always ends with explicit, sized asks for stakeholders
 rather than just a description of the work.
 
+`humanizer` is a language-cleanup pass. It strips the tells that make prose read
+as AI-generated (em-dash overuse, rule-of-three padding, promotional adjectives,
+"AI vocabulary", filler, and hedging), based on Wikipedia's "Signs of AI writing"
+guide. It works on its own on any text, and `improvement-plan` calls it as a final
+pass so plans land in plain, human language for non-technical and non-native
+readers.
+
 ## Install
 
 In an interactive Claude Code / Cowork session:
@@ -34,6 +41,7 @@ In an interactive Claude Code / Cowork session:
 /plugin marketplace add elroy-galbraith/explain-code
 /plugin install explain-code@explain-code-marketplace
 /plugin install improvement-plan@explain-code-marketplace
+/plugin install humanizer@explain-code-marketplace
 ```
 
 You can also install the packaged `.plugin` file directly in the Cowork desktop
@@ -60,6 +68,49 @@ improvement-plan/                   # the improvement-plan plugin
     └── SKILL.md                    # the skill instructions (structure, language rules, skeleton)
 ```
 
+`humanizer` isn't a directory here — it's referenced live from its upstream repo.
+See [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync).
+
+## Keeping third-party plugins in sync
+
+Plugins in this marketplace come from two kinds of `source`:
+
+- **Authored here** (`explain-code`, `improvement-plan`) use a local path, e.g.
+  `"source": "./explain-code"`. Their files live in this repo.
+- **Third-party** (`humanizer`) use a GitHub source that points straight at the
+  upstream repo, pinned to a tag:
+
+  ```json
+  { "source": "github", "repo": "blader/humanizer", "ref": "v2.9.1" }
+  ```
+
+  Nothing is copied in — Claude Code fetches it from blader's repo at install time,
+  so it never drifts from the original. To take a newer upstream release, bump the
+  `ref` (e.g. to `v2.9.2`) in `marketplace.json`. Users pull updates with
+  `/plugin marketplace update explain-code-marketplace` and
+  `/plugin update humanizer@explain-code-marketplace`.
+
+### Automated update PRs
+
+You don't have to watch upstreams by hand. A scheduled workflow
+([`.github/workflows/sync-plugins.yml`](.github/workflows/sync-plugins.yml)) runs
+weekly, checks each third-party plugin's upstream for a newer stable tag, and
+opens a **draft PR** that bumps the pinned `ref` when one appears — you review the
+linked upstream diff and merge. It only manages entries pinned to a semver tag;
+branch and SHA pins are left alone. The detection logic lives in
+[`.github/scripts/check_plugin_updates.py`](.github/scripts/check_plugin_updates.py)
+and runs by hand too:
+
+```bash
+python3 .github/scripts/check_plugin_updates.py \
+  --marketplace .claude-plugin/marketplace.json
+```
+
+Enabling it needs one repo setting: **Settings → Actions → General → Workflow
+permissions → "Allow GitHub Actions to create and approve pull requests."**
+Auto-opened PRs use `GITHUB_TOKEN`, so they don't themselves trigger the policy
+check — review the upstream compare link in each PR before merging.
+
 ## Try the explain-code renderer directly
 
 ```bash
@@ -79,6 +130,13 @@ a prompt for turning a diff into a self-contained HTML explainer with a quiz.
 This skill extends that idea to whole features, modules, and codebases (not
 just diffs), and adds a Python-rendered HTML/CSS/JS pipeline and shuffled quiz
 answers on top.
+
+`humanizer` is [blader](https://github.com/blader)'s
+[humanizer](https://github.com/blader/humanizer) skill (MIT, © Siqi Chen), based on
+[Wikipedia's "Signs of AI writing"](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
+guide maintained by WikiProject AI Cleanup. It isn't copied into this repo —
+`marketplace.json` references it directly from blader's repo, pinned to `v2.9.1`, so
+it stays in sync with upstream (see [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync)).
 
 ## License
 
