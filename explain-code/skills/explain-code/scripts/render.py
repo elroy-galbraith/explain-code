@@ -204,16 +204,23 @@ def _check_length_bias(gate, quiz):
                 "Rebalance the option lengths so length doesn't reveal the answer, then re-run."
             )
 
-    n = len(all_stats)
-    longest_rate = sum(s["p"] for s in all_stats) / n
-    chance_rate = sum(s["baseline"] for s in all_stats) / n
-    if longest_rate - chance_rate >= 0.20:
-        sys.stderr.write(
-            "render.py: warning: the correct answer skews long — 'always pick the longest "
-            f"option' would score ~{pct(longest_rate)} across the check vs ~{pct(chance_rate)} "
-            "by chance. Consider evening out option lengths (wordiest-correct: "
-            f"{giveaways(all_stats) or 'none individually'}).\n"
-        )
+    # Milder tell: worth evening out, not worth blocking. Evaluated per surface —
+    # pooling the gate and quiz together would let a balanced gate dilute a mildly
+    # biased quiz (or vice versa) below the threshold, so mirror the per-surface
+    # structure of the error checks above.
+    for label, stats in (("gate", gate_stats), ("quiz", quiz_stats)):
+        if not stats:
+            continue
+        m = len(stats)
+        longest_rate = sum(s["p"] for s in stats) / m
+        chance_rate = sum(s["baseline"] for s in stats) / m
+        if longest_rate - chance_rate >= 0.20:
+            sys.stderr.write(
+                f"render.py: warning: in the {label}, the correct answer skews long — "
+                f"'always pick the longest option' would score ~{pct(longest_rate)} vs "
+                f"~{pct(chance_rate)} by chance. Even out option lengths (wordiest-correct: "
+                f"{giveaways(stats) or 'none individually'}).\n"
+            )
 
 
 def _process(spec):

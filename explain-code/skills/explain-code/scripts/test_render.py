@@ -149,6 +149,22 @@ def test_length_bias():
     check("mild tell renders", status == "ok")
     check("mild tell warns", "warning" in warn and "longest" in warn)
 
+    # Per-surface warning: a mildly biased quiz must still warn even when a
+    # balanced gate is present. Pooling the two surfaces would dilute the quiz's
+    # excess below the threshold and silence it (the quiz alone warns at ~30%
+    # over chance; pooled with the gate it drops under 20%).
+    equal = ["one two three four", "five six seven eight", "nine ten x y", "aa bb cc dd"]
+    diluted = {"slug": "s",
+        "gate": [q(*equal), q(*equal), q(*equal)],  # all options equal length -> no gate tell
+        "quiz": [
+            q("this correct answer is clearly the sole longest option here now", "short", "brief", "tiny"),
+            q("again the correct choice is the wordiest of all four options", "no", "nah", "nope"),
+            q(*equal), q(*equal), q(*equal),
+        ]}
+    status, warn = render_result(diluted)
+    check("balanced gate doesn't dilute a quiz warning", status == "ok" and "quiz" in warn and "warning" in warn)
+    check("balanced gate itself stays silent", "in the gate" not in warn)
+
 
 def _balanced_quiz():
     """A quiz where the correct answer is never the sole longest option."""
@@ -186,7 +202,8 @@ def test_shuffle():
 
 def test_sample():
     print("bundled sample_spec.json:")
-    sample = json.load(open(os.path.join(HERE, "sample_spec.json"), encoding="utf-8"))
+    with open(os.path.join(HERE, "sample_spec.json"), encoding="utf-8") as fh:
+        sample = json.load(fh)
     status, warn = render_result(sample)
     check("sample renders", status == "ok")
     check("sample emits no length-bias warning", warn.strip() == "")

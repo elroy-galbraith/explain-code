@@ -2,20 +2,22 @@ name: explain-code render tests
 
 # Runs the render.py test suite and re-renders every bundled spec, so a change
 # to render.py or to a spec can't regress the answer-length-bias guard (or any
-# other validation) without CI going red. Pure Python 3 standard library — no
-# install step needed.
+# other validation) without CI going red. It also diffs each freshly rendered
+# demo page against the committed docs/*.html, so a spec edit that wasn't
+# followed by a re-render is caught instead of shipping a stale page. Pure
+# Python 3 standard library — no install step needed.
 
 on:
   push:
     branches: [main]
     paths:
       - "explain-code/skills/explain-code/scripts/**"
-      - "docs/specs/**"
+      - "docs/**"
       - ".github/workflows/explain-code-tests.yml"
   pull_request:
     paths:
       - "explain-code/skills/explain-code/scripts/**"
-      - "docs/specs/**"
+      - "docs/**"
       - ".github/workflows/explain-code-tests.yml"
 
 permissions:
@@ -36,26 +38,46 @@ jobs:
       - name: Run render.py test suite
         run: python3 explain-code/skills/explain-code/scripts/test_render.py
 
-      - name: Re-render every bundled spec (must be clean — no error, no warning)
+      - name: Re-render specs cleanly and verify committed demo HTML is in sync
         run: |
-          set -e
+          set -euo pipefail
           RENDER=explain-code/skills/explain-code/scripts/render.py
+          tmp=$(mktemp -d)
           status=0
-          for spec in \
-            explain-code/skills/explain-code/scripts/sample_spec.json \
-            docs/specs/pr.json \
-            docs/specs/feature.json \
-            docs/specs/module.json; do
-            echo "== $spec =="
-            # Fail the job if render.py errors OR prints a length-bias warning:
-            # the committed specs are examples authors copy from, so they must
-            # model a balanced quiz, not merely an un-blocked one.
-            warn=$(python3 "$RENDER" "$spec" -o /dev/null 2>&1 >/dev/null || { echo "RENDER_ERROR"; })
-            if [ -n "$warn" ]; then
-              echo "  FAIL: $warn"
-              status=1
+
+          # Render $1 to $2 and fail on ANY stderr. render.py errors on a
+          # blocking length-bias defect and warns on a milder one; the committed
+          # specs are examples authors copy from, so both must be clean.
+          render_clean() {
+            local spec="$1" out="$2" err
+            if ! err=$(python3 "$RENDER" "$spec" -o "$out" 2>&1 >/dev/null); then
+              echo "  $spec: render error: $err"; return 1
+            fi
+            if [ -n "$err" ]; then echo "  $spec: $err"; return 1; fi
+            return 0
+          }
+
+          echo "== sample_spec.json (render-clean only; no committed page) =="
+          if render_clean explain-code/skills/explain-code/scripts/sample_spec.json "$tmp/sample.html"; then
+            echo "  ok"
+          else
+            status=1
+          fi
+
+          # Demo specs: the render must be clean AND byte-identical to the
+          # committed docs/<name>.html, so a spec change without a matching
+          # re-render is caught here rather than silently shipping stale HTML.
+          for name in pr feature module; do
+            echo "== docs/specs/$name.json -> docs/$name.html =="
+            if ! render_clean "docs/specs/$name.json" "$tmp/$name.html"; then
+              status=1; continue
+            fi
+            if diff -u "docs/$name.html" "$tmp/$name.html"; then
+              echo "  ok (committed HTML matches spec)"
             else
-              echo "  ok"
+              echo "  FAIL: docs/$name.html is stale — run: python3 $RENDER docs/specs/$name.json -o docs/$name.html"
+              status=1
             fi
           done
+
           exit $status
