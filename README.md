@@ -66,13 +66,29 @@ improvement-plan/                   # the improvement-plan plugin
 ├── .claude-plugin/plugin.json      # plugin manifest
 └── skills/improvement-plan/
     └── SKILL.md                    # the skill instructions (structure, language rules, skeleton)
-humanizer/                          # the humanizer plugin (vendored from blader/humanizer, MIT)
-├── .claude-plugin/plugin.json      # plugin manifest
-├── skills/humanizer/
-│   └── SKILL.md                    # the skill instructions (33 AI-writing tells + fixes)
-├── LICENSE                         # upstream MIT license (© Siqi Chen)
-└── README.md                       # provenance, standalone use, improvement-plan pairing
 ```
+
+`humanizer` isn't a directory here — it's referenced live from its upstream repo.
+See [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync).
+
+## Keeping third-party plugins in sync
+
+Plugins in this marketplace come from two kinds of `source`:
+
+- **Authored here** (`explain-code`, `improvement-plan`) use a local path, e.g.
+  `"source": "./explain-code"`. Their files live in this repo.
+- **Third-party** (`humanizer`) use a GitHub source that points straight at the
+  upstream repo, pinned to a tag:
+
+  ```json
+  { "source": "github", "repo": "blader/humanizer", "ref": "v2.9.1" }
+  ```
+
+  Nothing is copied in — Claude Code fetches it from blader's repo at install time,
+  so it never drifts from the original. To take a newer upstream release, bump the
+  `ref` (e.g. to `v2.9.2`) in `marketplace.json`. Users pull updates with
+  `/plugin marketplace update explain-code-marketplace` and
+  `/plugin update humanizer@explain-code-marketplace`.
 
 ## Try the explain-code renderer directly
 
@@ -94,11 +110,12 @@ This skill extends that idea to whole features, modules, and codebases (not
 just diffs), and adds a Python-rendered HTML/CSS/JS pipeline and shuffled quiz
 answers on top.
 
-`humanizer` is vendored from [blader](https://github.com/blader)'s
-[humanizer](https://github.com/blader/humanizer) skill (v2.9.1, MIT, © Siqi Chen),
-which is based on [Wikipedia's "Signs of AI writing"](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
-guide maintained by WikiProject AI Cleanup. The copy under `humanizer/` tracks
-that upstream; update it from there rather than editing the patterns in place.
+`humanizer` is [blader](https://github.com/blader)'s
+[humanizer](https://github.com/blader/humanizer) skill (MIT, © Siqi Chen), based on
+[Wikipedia's "Signs of AI writing"](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
+guide maintained by WikiProject AI Cleanup. It isn't copied into this repo —
+`marketplace.json` references it directly from blader's repo, pinned to `v2.9.1`, so
+it stays in sync with upstream (see [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync)).
 
 ## License
 
