@@ -1,0 +1,61 @@
+name: explain-code render tests
+
+# Runs the render.py test suite and re-renders every bundled spec, so a change
+# to render.py or to a spec can't regress the answer-length-bias guard (or any
+# other validation) without CI going red. Pure Python 3 standard library — no
+# install step needed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "explain-code/skills/explain-code/scripts/**"
+      - "docs/specs/**"
+      - ".github/workflows/explain-code-tests.yml"
+  pull_request:
+    paths:
+      - "explain-code/skills/explain-code/scripts/**"
+      - "docs/specs/**"
+      - ".github/workflows/explain-code-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run render.py test suite
+        run: python3 explain-code/skills/explain-code/scripts/test_render.py
+
+      - name: Re-render every bundled spec (must be clean — no error, no warning)
+        run: |
+          set -e
+          RENDER=explain-code/skills/explain-code/scripts/render.py
+          status=0
+          for spec in \
+            explain-code/skills/explain-code/scripts/sample_spec.json \
+            docs/specs/pr.json \
+            docs/specs/feature.json \
+            docs/specs/module.json; do
+            echo "== $spec =="
+            # Fail the job if render.py errors OR prints a length-bias warning:
+            # the committed specs are examples authors copy from, so they must
+            # model a balanced quiz, not merely an un-blocked one.
+            warn=$(python3 "$RENDER" "$spec" -o /dev/null 2>&1 >/dev/null || { echo "RENDER_ERROR"; })
+            if [ -n "$warn" ]; then
+              echo "  FAIL: $warn"
+              status=1
+            else
+              echo "  ok"
+            fi
+          done
+          exit $status

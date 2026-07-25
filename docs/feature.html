@@ -81,25 +81,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="0">
-            <span>So the token can be recovered later if the user loses the email</span>
+            <span>So the token can be recovered and re-sent if the user loses the email</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="1">
-            <span>So that reading the database (a backup, a log, a leaked dump) doesn&#x27;t hand out a working token</span>
+            <span>So that reading the database can&#x27;t produce a token that actually works</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="2">
-            <span>Hashing is faster than storing a plain string</span>
+            <span>Comparing fixed-length hashes is faster than matching long token strings</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="3">
-            <span>Because email links can&#x27;t contain long strings</span>
+            <span>Because some email clients truncate links that run longer than a fixed character count</span>
           </label>
         </li>
       </ul>
@@ -112,25 +112,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="0">
-            <span>It would break the resend button</span>
+            <span>The resend button would stop working once an unexpired token already exists</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="1">
-            <span>It would use more storage</span>
+            <span>Old token rows would accumulate in the database and waste storage over time</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="2">
-            <span>The email provider would flag it as spam</span>
+            <span>The email provider would eventually flag repeated verification messages as spam</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="3">
-            <span>An old email sitting in an inbox, a forward, or a leaked mailbox stays a valid account-takeover path indefinitely</span>
+            <span>A leaked or forwarded email quietly stays a valid account-takeover link indefinitely</span>
           </label>
         </li>
       </ul>
@@ -143,25 +143,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="0">
-            <span>To save on email sending costs only</span>
+            <span>To keep transactional email sending costs down as the total user base keeps growing</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="1">
-            <span>So it can&#x27;t be used to mail-bomb an inbox that isn&#x27;t the attacker&#x27;s own</span>
+            <span>So it can&#x27;t be used to mail-bomb an inbox the attacker doesn&#x27;t own</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="2">
-            <span>To force users to wait before logging in</span>
+            <span>To make users pause between attempts instead of retrying the link immediately</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="3">
-            <span>Because email providers block all automated mail</span>
+            <span>Because email providers block your domain outright once you exceed their sending limits</span>
           </label>
         </li>
       </ul>
@@ -269,25 +269,25 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="0">
-            <span>Fully active with no restrictions</span>
+            <span>Fully active immediately, with no restrictions on what it can do</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="1">
-            <span>Not created until the email link is clicked</span>
+            <span>Not actually created until the user clicks the verification link in the email</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="2">
-            <span>Created, but limited until the email is verified</span>
+            <span>Created right away, but limited in what it can do until verified</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="3">
-            <span>Pending manual approval by an admin</span>
+            <span>Held in a pending queue until an administrator manually approves it</span>
           </label>
         </li>
       </ul>
@@ -300,25 +300,25 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="0">
-            <span>It&#x27;s required by the email provider</span>
+            <span>It&#x27;s a hashing step the email provider&#x27;s link format happens to require</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="1">
-            <span>Because the raw token was never stored — only its hash was, at creation time — so the same transformation has to be applied to compare them</span>
+            <span>Only the hash was stored, so the token must be re-hashed to match</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="2">
-            <span>Hashing makes the lookup query faster</span>
+            <span>Hashing produces a fixed-length key that indexes and looks up faster</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="3">
-            <span>To shorten the token for the URL</span>
+            <span>To shorten the token into a compact value that fits cleanly in a URL</span>
           </label>
         </li>
       </ul>
@@ -331,7 +331,7 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="0">
-            <span>It sends a new verification email automatically</span>
+            <span>It automatically issues a fresh token and sends another verification email</span>
           </label>
         </li>
         <li>
@@ -343,13 +343,13 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="2">
-            <span>The account is verified again with no issue</span>
+            <span>The account is simply verified again, with no error on the repeat click</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="3">
-            <span>It un-verifies the account</span>
+            <span>It reverses the first verification and returns the account to unverified</span>
           </label>
         </li>
       </ul>
@@ -362,25 +362,25 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="0">
-            <span>IP-based limits are harder to implement</span>
+            <span>IP-based limits are harder to implement and easy to bypass with proxies</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="1">
-            <span>Accounts don&#x27;t have IP addresses</span>
+            <span>Accounts don&#x27;t map cleanly to a single IP address the way individual requests do</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="2">
-            <span>To make the limit stricter for mobile users</span>
+            <span>To apply a stricter limit to mobile users who share carrier IP ranges</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="3">
-            <span>Because the attack this guards against is spamming someone else&#x27;s inbox, regardless of which IP the attacker uses</span>
+            <span>Because the attack is flooding someone else&#x27;s inbox, whatever IP the attacker uses</span>
           </label>
         </li>
       </ul>
@@ -393,25 +393,25 @@ def resend_verification(user):
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="0">
-            <span>A separate scheduled cleanup job removes accounts that stay unverified past a set age</span>
+            <span>A scheduled cleanup job removes accounts left unverified past a set age</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="1">
-            <span>The token&#x27;s expiry automatically deletes the account</span>
+            <span>The token&#x27;s expiry timer automatically deletes the account along with the token</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="2">
-            <span>They&#x27;re verified automatically after 30 days</span>
+            <span>They&#x27;re verified automatically once thirty days pass without any action</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="3">
-            <span>They stay limited forever with no further action</span>
+            <span>They stay in the limited state forever, since nothing ever cleans them up</span>
           </label>
         </li>
       </ul>

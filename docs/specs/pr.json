@@ -6,30 +6,30 @@
     {
       "prompt": "Before this fix, why could a note silently disappear from every page of results?",
       "options": [
-        {"text": "The cursor was built from the created_at timestamp alone, and ties on that column let rows fall on the wrong side of the cursor", "correct": true},
-        {"text": "The database occasionally deleted rows during a page load", "correct": false},
-        {"text": "The API cached the first page and never refreshed it", "correct": false},
-        {"text": "The limit value was set too low", "correct": false}
+        {"text": "The cursor used created_at alone, so rows sharing a timestamp landed on the wrong side", "correct": true},
+        {"text": "The database occasionally deleted rows mid-request during a page load when two concurrent imports overlapped on it", "correct": false},
+        {"text": "The API cached the first page and never refreshed it, hiding newer rows", "correct": false},
+        {"text": "The limit value was set too low, so later pages returned nothing", "correct": false}
       ],
       "explanation": "A cursor built from a non-unique column can't tell same-timestamp rows apart, so a strict greater-than comparison drops whichever of the tied rows lands on the wrong side."
     },
     {
       "prompt": "What makes the pair (created_at, id) a safe cursor where created_at alone was not?",
       "options": [
-        {"text": "It's twice as long, so collisions are half as likely", "correct": false},
-        {"text": "id is unique, so the pair gives every row a distinct, total order even when timestamps tie", "correct": true},
-        {"text": "It lets the database skip sorting the rows", "correct": false},
-        {"text": "It stores the cursor as an integer instead of a string", "correct": false}
+        {"text": "The pair is twice as long, so timestamp collisions become half as likely to occur", "correct": false},
+        {"text": "id is unique, so the pair orders every row distinctly even when timestamps tie", "correct": true},
+        {"text": "It lets the database skip sorting the rows, reading them straight off the primary index", "correct": false},
+        {"text": "It stores the cursor as an integer, not a string, dodging encoding errors", "correct": false}
       ],
       "explanation": "Tuple comparison falls back to id only when created_at ties, so every row still has a unique position in the order — nothing to skip or duplicate."
     },
     {
       "prompt": "Why paginate with a cursor at all instead of OFFSET/LIMIT?",
       "options": [
-        {"text": "Cursors are shorter to type in a URL", "correct": false},
-        {"text": "OFFSET re-counts rows from the start each time, so inserts or deletes ahead of the page shift results and get slower on later pages", "correct": true},
-        {"text": "OFFSET isn't supported by most SQL databases", "correct": false},
-        {"text": "Cursors don't require an ORDER BY clause", "correct": false}
+        {"text": "Cursors are shorter to type into a URL and much easier to bookmark", "correct": false},
+        {"text": "OFFSET re-counts from the start each time, so later pages drift and slow down", "correct": true},
+        {"text": "OFFSET isn't supported by most SQL databases, so a cursor is the only portable option", "correct": false},
+        {"text": "Cursors don't require an ORDER BY clause, since the database returns rows already in order", "correct": false}
       ],
       "explanation": "A cursor anchors to a row, not a row count, so it stays correct and fast no matter how many rows are inserted or removed ahead of it."
     }
@@ -64,50 +64,50 @@
     {
       "prompt": "A bulk import creates 40 notes that all share the same created_at. What did the old pagination do?",
       "options": [
-        {"text": "Returned all 40 correctly, just in a different order", "correct": false},
-        {"text": "Threw a 500 error on the second page", "correct": false},
-        {"text": "Silently dropped some of the 40 from every page", "correct": true},
-        {"text": "Returned all 40 twice", "correct": false}
+        {"text": "Returned all 40 correctly, just spread across the pages in a different order than before", "correct": false},
+        {"text": "Threw a 500 error on the second page once the tied timestamps were compared", "correct": false},
+        {"text": "Silently dropped some of the 40, so they appeared on no page", "correct": true},
+        {"text": "Returned all 40, but duplicated several of them across two adjacent pages", "correct": false}
       ],
       "explanation": "Rows exactly at the page boundary's timestamp could fail the strict greater-than check on the next page after already being excluded from the current one — dropped, not duplicated."
     },
     {
       "prompt": "Why does the fixed query sort by created_at DESC, id DESC instead of just created_at DESC?",
       "options": [
-        {"text": "It makes the query run faster", "correct": false},
-        {"text": "So the ORDER BY agrees with the tuple comparison in the WHERE clause — otherwise rows could still be skipped", "correct": true},
-        {"text": "It's required syntax for row-value comparisons", "correct": false},
-        {"text": "So id is included in the response payload", "correct": false}
+        {"text": "It makes the query run faster by letting the planner read straight from a covering index", "correct": false},
+        {"text": "So the ORDER BY matches the WHERE tuple comparison; otherwise rows can still be skipped", "correct": true},
+        {"text": "It's required syntax whenever a row-value comparison is used in the WHERE clause", "correct": false},
+        {"text": "So the id is included in the response payload returned to the client", "correct": false}
       ],
       "explanation": "The sort order and the boundary comparison must use the same key, or a row could sort on one side of the cursor but compare on the other."
     },
     {
       "prompt": "What does the new cursor encode?",
       "options": [
-        {"text": "Just the note's id", "correct": false},
-        {"text": "Just the created_at timestamp", "correct": false},
-        {"text": "Both created_at and id", "correct": true},
-        {"text": "The full note content", "correct": false}
+        {"text": "Just the note's id, which the query looks up to recover its timestamp", "correct": false},
+        {"text": "Just the created_at timestamp, exactly as the original buggy cursor did", "correct": false},
+        {"text": "Both created_at and id, encoded together into a single base64 cursor string", "correct": true},
+        {"text": "The full note content, so the next page renders without another query", "correct": false}
       ],
       "explanation": "Encoding both fields is what gives every row a unique position, even when timestamps tie."
     },
     {
       "prompt": "Why does the regression test insert notes with an explicitly identical timestamp rather than just inserting them normally?",
       "options": [
-        {"text": "To make the test run faster", "correct": false},
-        {"text": "Because the bug only reproduces when timestamps tie, which normal inserts might not do reliably", "correct": true},
-        {"text": "Because the API requires a created_at parameter", "correct": false},
-        {"text": "To test sorting order instead of pagination", "correct": false}
+        {"text": "To make the test run faster by skipping the extra clock calls that normal note creation makes", "correct": false},
+        {"text": "Because the bug only reproduces when timestamps tie, which normal inserts may not do", "correct": true},
+        {"text": "Because the notes API requires a created_at parameter on every insert", "correct": false},
+        {"text": "To test the sort ordering of results rather than the pagination boundary itself", "correct": false}
       ],
       "explanation": "Forcing the tie makes the regression test deterministic instead of depending on chance clock collisions."
     },
     {
       "prompt": "Why prefer a cursor over OFFSET/LIMIT for this endpoint?",
       "options": [
-        {"text": "OFFSET is deprecated in SQL", "correct": false},
-        {"text": "A cursor anchors to a specific row, so results stay correct and fast even as rows are inserted or deleted ahead of the page", "correct": true},
-        {"text": "OFFSET can't be combined with ORDER BY", "correct": false},
-        {"text": "Cursors use less memory on the client", "correct": false}
+        {"text": "OFFSET is deprecated in the SQL standard and slated for removal soon", "correct": false},
+        {"text": "A cursor anchors to a specific row, so results stay correct as rows shift", "correct": true},
+        {"text": "OFFSET can't be combined with an ORDER BY clause on the same query", "correct": false},
+        {"text": "Cursors use noticeably less memory on the client, since pages arrive one at a time", "correct": false}
       ],
       "explanation": "OFFSET counts from the start of the result set every time, so it drifts under concurrent writes and gets slower for later pages; a cursor doesn't have either problem."
     }

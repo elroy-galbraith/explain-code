@@ -71,6 +71,16 @@ policy that encodes it.
 3. **No answer-position bias.** You just mark which option is `correct`;
    `render.py` shuffles positions deterministically so the answer isn't always in
    the same slot. Never try to randomize positions yourself.
+4. **No answer-length bias.** The correct option must not be identifiable by
+   length. The natural pull is to write the right answer as the longest, most-
+   qualified choice and the distractors as short throwaways — but then "just click
+   the wordiest option" beats the check without any understanding, which defeats
+   the gate. Keep every option in the same length band: make each distractor as
+   fleshed-out as the correct answer, or trim the correct answer to match. Vary
+   which option is longest across questions; let some correct answers be the
+   *shortest*. `render.py` measures this and, unlike position, cannot fix it for
+   you — it fails the render if the answer is a length giveaway, and only
+   rewriting the options clears it.
 
 ## Workflow
 
@@ -85,9 +95,11 @@ policy that encodes it.
    ```bash
    python3 "<this-skill-dir>/scripts/render.py" spec.json -o <slug>.html
    ```
-   `render.py` validates the spec and fails loudly if a question lacks exactly one
-   correct option, so fix and re-run if it complains. It needs only the Python 3
-   standard library — no packages to install.
+   `render.py` validates the spec and fails loudly — if a question lacks exactly
+   one correct option, or if the correct answers skew long enough that "just pick
+   the wordiest option" would beat the check — so fix and re-run if it complains
+   (it also prints a non-blocking warning for a milder length tell). It needs only
+   the Python 3 standard library — no packages to install.
 4. **Deliver the `.html` file** to the user (in Cowork, use SendUserFile). Mention
    they can open it in any browser, and save or import it if they want to keep it.
 
@@ -123,7 +135,10 @@ Same question shape as the quiz:
 ```
 
 Rules: exactly one option has `correct: true`; give 2-4 options; distractors must
-be plausible, not filler. Order doesn't matter — it gets shuffled.
+be plausible, not filler. Keep the options within a similar length band — the
+correct one must not be the longest or most-qualified, or it gives itself away
+(design goal 4; `render.py` enforces this). Order doesn't matter — it gets
+shuffled.
 
 ### `sections` — brief by default, deep on demand
 
@@ -159,7 +174,9 @@ the summary is not a teaser, it's a complete quick answer.
 Five medium-difficulty questions that confirm the ideas stuck — this is the
 "green" step after reading. Same question shape as `gate`. Positions are shuffled
 at render time. Don't reuse the gate questions verbatim; probe the same core ideas
-from a different angle.
+from a different angle. The same length-balance rule applies — don't let the
+correct answer be the wordiest option, or the quiz rewards eyeballing length over
+understanding.
 
 ## Notes
 

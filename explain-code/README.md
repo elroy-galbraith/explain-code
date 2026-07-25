@@ -12,9 +12,11 @@ unfamiliar codebase — as a single self-contained HTML page.
 - **Brief by default, deep on demand.** Each section shows a short summary always;
   the full walkthrough sits behind a toggle. One artifact for the 60-second review
   and the hour-long onboarding read.
-- **Shuffled answers.** Options carry a `correct` flag; `render.py` shuffles their
-  positions with a deterministic per-question seed, so the answer isn't pinned to
-  one slot.
+- **Shuffled answers, no length tell.** Options carry a `correct` flag; `render.py`
+  shuffles their positions with a deterministic per-question seed, so the answer
+  isn't pinned to one slot — and it fails the render if the correct answer is a
+  length giveaway (always the longest option), a tell shuffling can't fix on its
+  own.
 - **Python-rendered.** The model emits a compact JSON spec; `render.py` owns the
   CSS/JS/scaffolding. Cheaper and more consistent than hand-writing HTML each run.
 
