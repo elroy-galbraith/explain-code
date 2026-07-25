@@ -16,9 +16,9 @@
     {
       "prompt": "Why store the bucket state in Redis rather than in process memory?",
       "options": [
-        {"text": "Redis is faster than local memory for this", "correct": false},
-        {"text": "So the limit is shared consistently across all service instances", "correct": true},
-        {"text": "Redis encrypts the counters automatically", "correct": false}
+        {"text": "Local process memory would be faster to read", "correct": false},
+        {"text": "So all instances share one per-client limit", "correct": true},
+        {"text": "Redis encrypts the stored counters for you", "correct": false}
       ],
       "explanation": "Per-instance memory would let a client exceed the global limit by hitting different pods."
     },
@@ -66,10 +66,10 @@
     {
       "prompt": "Why is the refill-and-decrement done in a Lua script?",
       "options": [
-        {"text": "To make it atomic so concurrent requests can't double-spend the last token", "correct": true},
-        {"text": "Because Redis cannot store integers otherwise", "correct": false},
-        {"text": "To encrypt the token counts", "correct": false},
-        {"text": "To avoid needing a Redis connection", "correct": false}
+        {"text": "So two requests can't spend the same token", "correct": true},
+        {"text": "Because Redis can't store integer counters otherwise", "correct": false},
+        {"text": "To keep the stored token counts encrypted at rest", "correct": false},
+        {"text": "To avoid opening a second Redis connection", "correct": false}
       ],
       "explanation": "One atomic round trip prevents the check-then-act race."
     },

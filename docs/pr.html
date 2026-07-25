@@ -81,25 +81,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="0">
-            <span>The API cached the first page and never refreshed it</span>
+            <span>The API cached the first page and never refreshed it, hiding newer rows</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="1">
-            <span>The cursor was built from the created_at timestamp alone, and ties on that column let rows fall on the wrong side of the cursor</span>
+            <span>The cursor used created_at alone, so rows sharing a timestamp landed on the wrong side</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="2">
-            <span>The limit value was set too low</span>
+            <span>The limit value was set too low, so later pages returned nothing</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="3">
-            <span>The database occasionally deleted rows during a page load</span>
+            <span>The database occasionally deleted rows mid-request during a page load when two concurrent imports overlapped on it</span>
           </label>
         </li>
       </ul>
@@ -112,25 +112,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="0">
-            <span>It lets the database skip sorting the rows</span>
+            <span>It lets the database skip sorting the rows, reading them straight off the primary index</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="1">
-            <span>It stores the cursor as an integer instead of a string</span>
+            <span>It stores the cursor as an integer, not a string, dodging encoding errors</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="2">
-            <span>id is unique, so the pair gives every row a distinct, total order even when timestamps tie</span>
+            <span>id is unique, so the pair orders every row distinctly even when timestamps tie</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="3">
-            <span>It&#x27;s twice as long, so collisions are half as likely</span>
+            <span>The pair is twice as long, so timestamp collisions become half as likely to occur</span>
           </label>
         </li>
       </ul>
@@ -143,25 +143,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="0">
-            <span>Cursors don&#x27;t require an ORDER BY clause</span>
+            <span>Cursors don&#x27;t require an ORDER BY clause, since the database returns rows already in order</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="1">
-            <span>OFFSET isn&#x27;t supported by most SQL databases</span>
+            <span>OFFSET isn&#x27;t supported by most SQL databases, so a cursor is the only portable option</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="2">
-            <span>OFFSET re-counts rows from the start each time, so inserts or deletes ahead of the page shift results and get slower on later pages</span>
+            <span>OFFSET re-counts from the start each time, so later pages drift and slow down</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="3">
-            <span>Cursors are shorter to type in a URL</span>
+            <span>Cursors are shorter to type into a URL and much easier to bookmark</span>
           </label>
         </li>
       </ul>
@@ -266,25 +266,25 @@ def decode_cursor(cursor):
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="0">
-            <span>Returned all 40 correctly, just in a different order</span>
+            <span>Returned all 40 correctly, just spread across the pages in a different order than before</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="1">
-            <span>Returned all 40 twice</span>
+            <span>Returned all 40, but duplicated several of them across two adjacent pages</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="2">
-            <span>Silently dropped some of the 40 from every page</span>
+            <span>Silently dropped some of the 40, so they appeared on no page</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="3">
-            <span>Threw a 500 error on the second page</span>
+            <span>Threw a 500 error on the second page once the tied timestamps were compared</span>
           </label>
         </li>
       </ul>
@@ -297,25 +297,25 @@ def decode_cursor(cursor):
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="0">
-            <span>It&#x27;s required syntax for row-value comparisons</span>
+            <span>It&#x27;s required syntax whenever a row-value comparison is used in the WHERE clause</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="1">
-            <span>So the ORDER BY agrees with the tuple comparison in the WHERE clause — otherwise rows could still be skipped</span>
+            <span>So the ORDER BY matches the WHERE tuple comparison; otherwise rows can still be skipped</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="2">
-            <span>It makes the query run faster</span>
+            <span>It makes the query run faster by letting the planner read straight from a covering index</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="3">
-            <span>So id is included in the response payload</span>
+            <span>So the id is included in the response payload returned to the client</span>
           </label>
         </li>
       </ul>
@@ -328,25 +328,25 @@ def decode_cursor(cursor):
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="0">
-            <span>The full note content</span>
+            <span>The full note content, so the next page renders without another query</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="1">
-            <span>Both created_at and id</span>
+            <span>Both created_at and id, encoded together into a single base64 cursor string</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="2">
-            <span>Just the note&#x27;s id</span>
+            <span>Just the note&#x27;s id, which the query looks up to recover its timestamp</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="3">
-            <span>Just the created_at timestamp</span>
+            <span>Just the created_at timestamp, exactly as the original buggy cursor did</span>
           </label>
         </li>
       </ul>
@@ -359,25 +359,25 @@ def decode_cursor(cursor):
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="0">
-            <span>Because the API requires a created_at parameter</span>
+            <span>Because the notes API requires a created_at parameter on every insert</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="1">
-            <span>To test sorting order instead of pagination</span>
+            <span>To test the sort ordering of results rather than the pagination boundary itself</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="2">
-            <span>Because the bug only reproduces when timestamps tie, which normal inserts might not do reliably</span>
+            <span>Because the bug only reproduces when timestamps tie, which normal inserts may not do</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="3">
-            <span>To make the test run faster</span>
+            <span>To make the test run faster by skipping the extra clock calls that normal note creation makes</span>
           </label>
         </li>
       </ul>
@@ -390,25 +390,25 @@ def decode_cursor(cursor):
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="0">
-            <span>OFFSET can&#x27;t be combined with ORDER BY</span>
+            <span>OFFSET can&#x27;t be combined with an ORDER BY clause on the same query</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="1">
-            <span>OFFSET is deprecated in SQL</span>
+            <span>OFFSET is deprecated in the SQL standard and slated for removal soon</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="2">
-            <span>Cursors use less memory on the client</span>
+            <span>Cursors use noticeably less memory on the client, since pages arrive one at a time</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="3">
-            <span>A cursor anchors to a specific row, so results stay correct and fast even as rows are inserted or deleted ahead of the page</span>
+            <span>A cursor anchors to a specific row, so results stay correct as rows shift</span>
           </label>
         </li>
       </ul>

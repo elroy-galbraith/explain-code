@@ -81,25 +81,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="0">
-            <span>A job runs exactly one time, never more, never less</span>
+            <span>The job runs exactly one time — never more than once, never fewer.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="1">
-            <span>A job will run one or more times — it may occasionally run twice, but never zero times</span>
+            <span>The job runs at least once — possibly more, but never zero times.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="2">
-            <span>Jobs run in the exact order they were enqueued</span>
+            <span>Jobs are processed in the exact order they were originally enqueued, first to last.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-0" value="3">
-            <span>A job might run zero times if the worker is slow enough</span>
+            <span>The job may run zero times if a worker is slow enough to never reach it.</span>
           </label>
         </li>
       </ul>
@@ -112,25 +112,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="0">
-            <span>It makes them run faster</span>
+            <span>It&#x27;s mainly a performance optimization — idempotent handlers skip redundant work and so finish faster.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="1">
-            <span>It&#x27;s required to read from the database</span>
+            <span>It&#x27;s what lets a handler safely read from the database while other worker processes run concurrently.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="2">
-            <span>Because the queue can redeliver a job it isn&#x27;t sure finished, so the same job may execute more than once</span>
+            <span>Because a redelivered job may run more than once, so repeating it must stay safe.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-1" value="3">
-            <span>Idempotency is only needed for payment-related jobs</span>
+            <span>It only matters for payment jobs, where a duplicate run would double-charge the customer.</span>
           </label>
         </li>
       </ul>
@@ -143,25 +143,25 @@
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="0">
-            <span>Storing jobs that completed successfully, for auditing</span>
+            <span>An archive of jobs that completed successfully, kept around for later auditing and reporting.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="1">
-            <span>Holding jobs that failed repeatedly, past the retry limit, for a human to inspect instead of retrying forever</span>
+            <span>Holding jobs that exhausted their retries, set aside for a human to inspect.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="2">
-            <span>A backup copy of the main queue in case it goes down</span>
+            <span>A standby backup copy of the main queue, used to take over if it goes down.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="gate-2" value="3">
-            <span>Jobs scheduled to run in the future</span>
+            <span>A holding area for jobs scheduled to run at some point in the future.</span>
           </label>
         </li>
       </ul>
@@ -277,25 +277,25 @@ def run_job(job):
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="0">
-            <span>It&#x27;s lost permanently</span>
+            <span>The job is lost permanently, since no worker ever acknowledged that it finished.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="1">
-            <span>It stays leased forever until someone intervenes manually</span>
+            <span>It stays leased forever, blocking every other worker until an operator clears it by hand.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="2">
-            <span>Its lease expires after the visibility timeout, and it becomes available for another worker to pick up</span>
+            <span>Once its lease expires at the visibility timeout, another worker can claim it.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-0" value="3">
-            <span>It moves straight to the dead-letter queue</span>
+            <span>It&#x27;s moved straight to the dead-letter queue for a human to look at.</span>
           </label>
         </li>
       </ul>
@@ -308,25 +308,25 @@ def run_job(job):
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="0">
-            <span>Finally blocks aren&#x27;t supported in the worker&#x27;s language</span>
+            <span>The worker&#x27;s language doesn&#x27;t support finally blocks, so a clean return is the only option.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="1">
-            <span>So a crash or exception during the handler leaves the job unacked, letting the lease expire and the job retry instead of being silently marked done</span>
+            <span>A crash mid-handler leaves the job unacked, so its lease expires and it retries.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="2">
-            <span>Acking in a finally block would be slower</span>
+            <span>Acking inside a finally block would add an extra database write and slow the worker down.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-1" value="3">
-            <span>To reduce database writes</span>
+            <span>It cuts down on database writes by acknowledging each job only a single time.</span>
           </label>
         </li>
       </ul>
@@ -339,25 +339,25 @@ def run_job(job):
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="0">
-            <span>To guarantee jobs run in order</span>
+            <span>It&#x27;s how the queue guarantees that jobs still run in their original order after failures.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="1">
-            <span>It&#x27;s a side effect of how leases work and can&#x27;t be avoided</span>
+            <span>It&#x27;s an unavoidable side effect of how leases expire, not something the retry logic chooses.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="2">
-            <span>So repeated failures (often from an overloaded downstream service) don&#x27;t get hammered with immediate retries, making things worse</span>
+            <span>Spacing out retries avoids hammering an already-overloaded downstream service and making things worse.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-2" value="3">
-            <span>To make the queue easier to monitor</span>
+            <span>It makes the queue easier to monitor by spreading retry attempts out across the logs.</span>
           </label>
         </li>
       </ul>
@@ -370,25 +370,25 @@ def run_job(job):
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="0">
-            <span>It&#x27;s automatically marked as succeeded</span>
+            <span>It&#x27;s automatically marked as succeeded so the worker pool can move on to other jobs.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="1">
-            <span>It retries forever with the maximum backoff</span>
+            <span>It keeps retrying forever, spaced out at the maximum backoff interval, never giving up.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="2">
-            <span>It&#x27;s silently discarded</span>
+            <span>It&#x27;s silently discarded and deleted from the queue, with no record left behind.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-3" value="3">
-            <span>It moves to the dead-letter queue for a human to inspect</span>
+            <span>It moves to the dead-letter queue for a human to inspect.</span>
           </label>
         </li>
       </ul>
@@ -401,25 +401,25 @@ def run_job(job):
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="0">
-            <span>It&#x27;s faster than a database lookup</span>
+            <span>It&#x27;s faster than doing a database lookup to check whether the email already went out.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="1">
-            <span>The email provider requires an idempotency key for all requests</span>
+            <span>The email provider rejects any request that doesn&#x27;t include an idempotency key on it.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="2">
-            <span>Because a retry might be picked up by a different worker process that has no memory of the first attempt</span>
+            <span>A retry may run on a different worker that never saw the first attempt.</span>
           </label>
         </li>
         <li>
           <label class="option">
             <input type="radio" name="quiz-4" value="3">
-            <span>To make the email arrive faster</span>
+            <span>It mainly makes the email arrive at the recipient faster, with fewer delays before sending.</span>
           </label>
         </li>
       </ul>

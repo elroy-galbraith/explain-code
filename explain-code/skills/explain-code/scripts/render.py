@@ -10,12 +10,19 @@ one explanation to the next. Having the model hand-write the boilerplate each ti
 wastes tokens and invites malformed-HTML bugs. So the model emits a compact JSON
 spec and this script renders it deterministically.
 
-It also owns two things the model is bad at:
+It also owns three things the model is bad at:
   1. Answer-position shuffling. LLMs are poor RNGs and drift to the same slot.
      Here every option carries a `correct` flag and positions are shuffled at
      render time with a per-question seed, so correct answers spread across all
      positions and stay stable on reload.
-  2. The adaptive "test-first" gate + progressive disclosure wiring, so behaviour
+  2. Answer-length de-biasing. Models drift toward writing the correct option as
+     the longest, most-qualified choice and the distractors as short throwaways,
+     so "just click the wordiest option" quietly beats the check without any
+     understanding — which defeats the whole test-first gate. Unlike position,
+     length can't be fixed mechanically (padding or trimming would mangle the
+     content), so this script *detects* the tell and fails loudly, handing the
+     fix — rewrite the options — back to the author.
+  3. The adaptive "test-first" gate + progressive disclosure wiring, so behaviour
      is consistent no matter what the model wrote.
 
 Usage
@@ -93,6 +100,129 @@ def _normalize_question(q, seed):
     }
 
 
+def _word_count(text):
+    """Number of whitespace-separated words in an option's text."""
+    return len((text or "").split())
+
+
+def _longest_pick_probability(options):
+    """How much "always click the longest option" pays off for one question.
+
+    Returns ``(probability, correct_is_sole_longest)``:
+
+      * ``probability`` — the chance a reader who always picks a longest option
+        lands on the correct one: 1.0 when the correct option is the single
+        longest, 1/k on a k-way tie for longest that includes it, and 0.0 when
+        some distractor is longer. (An all-equal question yields 1/n, the same
+        as guessing — no length signal either way.)
+      * ``correct_is_sole_longest`` — True only when the correct option is
+        strictly longer than every distractor, i.e. the question is a giveaway.
+    """
+    counts = [_word_count(o.get("text", "")) for o in options]
+    correct = next((i for i, o in enumerate(options) if o.get("correct")), None)
+    if correct is None or not counts:
+        return 0.0, False
+    longest = max(counts)
+    longest_idxs = [i for i, c in enumerate(counts) if c == longest]
+    sole = longest_idxs == [correct]
+    if correct in longest_idxs:
+        return 1.0 / len(longest_idxs), sole
+    return 0.0, False
+
+
+def _check_length_bias(gate, quiz):
+    """Fail loudly when the correct answer is identifiable by its length.
+
+    Shuffling kills answer-*position* bias, but not answer-*length* bias: models
+    drift toward writing the correct option as the longest, most-qualified choice,
+    so a reader can ace the check by always clicking the wordiest option —
+    passing the gate and skipping the walkthrough without understanding anything.
+    Length can't be de-biased mechanically the way position can, so we detect it
+    here and hand the fix (rewrite the options) back to the author.
+
+    Two graded surfaces, checked the way each is actually scored:
+
+      * The **gate** is all-or-nothing (you must get every question right to
+        skip the content), so a length-picker only clears it by picking the
+        longest option in *every* gate question. The product of the per-question
+        hit-probabilities is exactly that pass chance — and a single gate
+        question whose correct answer is short drives it to zero. A high pass
+        chance defeats the disclosure gate, the skill's safety valve, so raise.
+      * The **quiz** is scored, so the exploit is the average hit-rate of always
+        picking the longest option. If that would ace the quiz well above chance,
+        length is giving the answer away, so raise.
+
+    A milder whole-artifact tell prints a non-blocking warning instead.
+    """
+    def stats_for(questions, block):
+        out = []
+        for i, q in enumerate(questions):
+            opts = q.get("options", [])
+            if len(opts) < 2:
+                continue
+            p, sole = _longest_pick_probability(opts)
+            out.append({
+                "loc": f"{block} Q{i + 1}",
+                "p": p,
+                "baseline": 1.0 / len(opts),
+                "sole": sole,
+            })
+        return out
+
+    gate_stats = stats_for(gate, "gate")
+    quiz_stats = stats_for(quiz, "quiz")
+    all_stats = gate_stats + quiz_stats
+    if not all_stats:
+        return
+
+    pct = lambda x: f"{round(x * 100)}%"
+    giveaways = lambda ss: ", ".join(s["loc"] for s in ss if s["sole"])
+
+    if gate_stats:
+        gate_pass = 1.0
+        for s in gate_stats:
+            gate_pass *= s["p"]
+        if gate_pass >= 0.5:
+            raise ValueError(
+                "answer-length bias: a reader can pass the gate just by clicking the "
+                f"longest option every time (pass chance ~{pct(gate_pass)}) — the correct "
+                f"answer is the wordiest in {giveaways(gate_stats) or 'the gate questions'}, "
+                "so they skip the walkthrough without understanding it. Even out the option "
+                "lengths (make the distractors as full as the correct answer, or trim the "
+                "correct answer to match) and re-run."
+            )
+
+    if quiz_stats:
+        n = len(quiz_stats)
+        longest_rate = sum(s["p"] for s in quiz_stats) / n
+        chance_rate = sum(s["baseline"] for s in quiz_stats) / n
+        if longest_rate >= 0.75 and longest_rate - chance_rate >= 0.25:
+            raise ValueError(
+                "answer-length bias: 'always pick the longest option' would score "
+                f"{pct(longest_rate)} on the quiz (~{pct(chance_rate)} is chance) because the "
+                f"correct answer is the longest in {giveaways(quiz_stats) or 'most questions'}. "
+                "Rebalance the option lengths so length doesn't reveal the answer, then re-run."
+            )
+
+    # Milder tell: worth evening out, not worth blocking. Evaluated per surface —
+    # pooling the gate and quiz together would let a balanced gate dilute a mildly
+    # biased quiz (or vice versa) below the threshold, so mirror the per-surface
+    # structure of the error checks above.
+    for label, stats in (("gate", gate_stats), ("quiz", quiz_stats)):
+        if not stats:
+            continue
+        m = len(stats)
+        longest_rate = sum(s["p"] for s in stats) / m
+        chance_rate = sum(s["baseline"] for s in stats) / m
+        if longest_rate - chance_rate >= 0.20:
+            sys.stderr.write(
+                f"render.py: warning: in the {label}, the correct answer skews long — "
+                f"'always pick the longest option' would score ~{pct(longest_rate)} vs "
+                f"~{pct(chance_rate)} by chance. Even out option lengths (wordiest-correct: "
+                f"{giveaways(stats) or 'none individually'}).\n"
+            )
+
+
 def _process(spec):
     slug = spec.get("slug", "explanation")
     gate = [
@@ -103,6 +233,9 @@ def _process(spec):
         _normalize_question(q, seed=f"{slug}:quiz:{i}")
         for i, q in enumerate(spec.get("quiz", []))
     ]
+    # Structural validation (exactly one correct, >=2 options) has now passed for
+    # every question; guard against the subtler length-tell before rendering.
+    _check_length_bias(spec.get("gate", []) or [], spec.get("quiz", []) or [])
     sections = []
     for i, s in enumerate(spec.get("sections", [])):
         sections.append({
