@@ -1,0 +1,18 @@
+{
+  "name": "microworld",
+  "version": "0.1.0",
+  "description": "Build a \"micro-world\" -- an interactive, scrubbable, self-contained HTML simulation that teaches how a system in the repo actually works, grounded in its real code and recorded numbers. Precomputes a deterministic event tape, renders it via a snapshot(idx) fold, and ships with a verification harness plus a growing learnings log.",
+  "author": {
+    "name": "Elroy Galbraith"
+  },
+  "license": "MIT",
+  "keywords": [
+    "micro-world",
+    "simulation",
+    "explainer",
+    "onboarding",
+    "documentation",
+    "html",
+    "dataviz"
+  ]
+}
