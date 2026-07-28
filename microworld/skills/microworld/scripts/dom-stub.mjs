@@ -4,7 +4,10 @@
 // See references/engine.md for the harness pattern this supports.
 
 export function extractScript(html) {
-  const m = html.match(/<script>([\s\S]*)<\/script>/);
+  // Non-greedy: a self-contained micro-world should have one <script> block,
+  // but a greedy match would silently span first-open to last-close if a
+  // second inline block (e.g. analytics) is ever added.
+  const m = html.match(/<script>([\s\S]*?)<\/script>/);
   if (!m) throw new Error("no <script> block found");
   return m[1];
 }

@@ -10,6 +10,8 @@ import { shootBothThemes } from "./screenshot-helpers.mjs";
 const url = "file://" + path.resolve("docs/microworlds/<name>.html");
 const out = path.resolve("tmp-screenshots");
 
+// TODO: update step indices below for this build — go(8)/go(15)/etc. are
+// specific to automl-openevolve-seeding.html's own step count and phases.
 await shootBothThemes(url, out, [
   { name: "1-briefing" },
   { click: "#brief-close", name: "2-mission" },

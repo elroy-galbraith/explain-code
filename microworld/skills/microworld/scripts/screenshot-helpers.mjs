@@ -14,12 +14,13 @@ const CHROMIUM_PATH = "/opt/pw-browsers/chromium";
 export async function shootBothThemes(url, out, steps) {
   mkdirSync(out, { recursive: true });
   const browser = await chromium.launch({ executablePath: CHROMIUM_PATH });
+  const pageErrors = [];
   try {
     for (const scheme of ["light", "dark"]) {
       const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: scheme });
       const page = await ctx.newPage();
       page.on("console", m => { if (m.type() === "error") console.log("CONSOLE ERROR:", m.text()); });
-      page.on("pageerror", e => console.log("PAGE ERROR:", e.message));
+      page.on("pageerror", e => { console.log("PAGE ERROR:", e.message); pageErrors.push(`${scheme}: ${e.message}`); });
       await page.goto(url);
       for (const step of steps) {
         if (step.click) await page.click(step.click);
@@ -30,5 +31,10 @@ export async function shootBothThemes(url, out, steps) {
     }
   } finally {
     await browser.close();
+  }
+  // Screenshots are still written above for inspection; fail loudly afterward
+  // so a runtime JS exception can't hide as a single easy-to-miss log line.
+  if (pageErrors.length) {
+    throw new Error(`${pageErrors.length} page error(s) during screenshot pass:\n${pageErrors.join("\n")}`);
   }
 }
