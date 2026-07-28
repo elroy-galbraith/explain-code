@@ -1,9 +1,14 @@
-// Worked example: screenshot pass for docs/microworlds/automl-openevolve-seeding.html.
+// Worked example: screenshot pass pattern, originally written against
+// docs/microworlds/automl-openevolve-seeding.html.
 // Requires: npm install playwright-core; uses the pre-installed Chromium.
+// Run from the repo root, with <name> and the output directory replaced for your build.
 import { chromium } from "playwright-core";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
 
-const url = "file:///home/user/TRIDENT-Val/docs/microworlds/automl-openevolve-seeding.html";
-const out = "/tmp/claude-0/-home-user-TRIDENT-Val/04f86a28-9f92-5f38-84a9-a17862a4649c/scratchpad";
+const url = "file://" + path.resolve("docs/microworlds/<name>.html");
+const out = path.resolve("tmp-screenshots");
+mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 

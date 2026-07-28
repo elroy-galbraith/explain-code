@@ -1,9 +1,12 @@
-// Worked example: verification harness for docs/microworlds/automl-openevolve-seeding.html.
+// Worked example: verification harness pattern, originally written against
+// docs/microworlds/automl-openevolve-seeding.html.
 // Adapt the DOM stub + assertion pattern for each new micro-world (see references/engine.md).
+// Run from the repo root, with <name> replaced by your build's HTML file.
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import vm from "node:vm";
 
-const html = readFileSync(new URL("./automl-openevolve-microworld.html", import.meta.url), "utf8");
+const html = readFileSync(path.resolve("docs/microworlds/<name>.html"), "utf8");
 const m = html.match(/<script>([\s\S]*)<\/script>/);
 if (!m) { console.error("no <script> block found"); process.exit(1); }
 const src = m[1];
