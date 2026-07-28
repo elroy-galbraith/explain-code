@@ -1,8 +1,10 @@
 # Micro-world engine pattern
 
-The canonical, fully-worked example is `docs/microworlds/automl-openevolve-seeding.html`
-(committed at repo root). Crib its structure; don't re-derive it. This file is the
-map of that structure plus the verification harness pattern.
+The canonical, fully-worked example this pattern was distilled from is
+`docs/microworlds/automl-openevolve-seeding.html`, originally built in the
+source repo this skill was extracted from — it doesn't ship with this plugin,
+so treat the description below as the map of its structure, not a file to
+open. Crib the structure it describes; don't re-derive it from scratch.
 
 ## Page anatomy
 
