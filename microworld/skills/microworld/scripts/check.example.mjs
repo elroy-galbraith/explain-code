@@ -1,51 +1,18 @@
 // Worked example: verification harness pattern, originally written against
 // docs/microworlds/automl-openevolve-seeding.html.
-// Adapt the DOM stub + assertion pattern for each new micro-world (see references/engine.md).
+// The DOM stub and script extraction are shared (dom-stub.mjs) so they're
+// tested once instead of hand-retyped per build; adapt the assertions below
+// for each new micro-world's own data model (see references/engine.md).
 // Run from the repo root, with <name> replaced by your build's HTML file.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
+import { extractScript, baseSandbox } from "./dom-stub.mjs";
 
 const html = readFileSync(path.resolve("docs/microworlds/<name>.html"), "utf8");
-const m = html.match(/<script>([\s\S]*)<\/script>/);
-if (!m) { console.error("no <script> block found"); process.exit(1); }
-const src = m[1];
+const src = extractScript(html);
 
-// ---- minimal DOM stub ----
-const makeEl = () => {
-  const el = {
-    _html: "", _attrs: new Map(), hidden: false, textContent: "",
-    style: {}, dataset: {},
-    classList: { add(){}, remove(){}, toggle(){} },
-    addEventListener(){}, setAttribute(k, v){ this._attrs.set(k, String(v)); },
-    getAttribute(k){ return this._attrs.get(k) ?? null; },
-    querySelectorAll(){ return []; },
-    appendChild(){}, closest(){ return null; },
-  };
-  Object.defineProperty(el, "innerHTML", {
-    get(){ return this._html; },
-    set(v){
-      this._html = v;
-      // crude sanity: flag unbalanced span/div/table tags
-      for (const tag of ["div", "span", "table", "tr", "td", "th", "button", "pre", "details"]) {
-        const open = (v.match(new RegExp(`<${tag}[\\s>]`, "g")) || []).length;
-        const close = (v.match(new RegExp(`</${tag}>`, "g")) || []).length;
-        if (open !== close) throw new Error(`unbalanced <${tag}> (${open} open / ${close} close) in innerHTML: ${v.slice(0, 120)}...`);
-      }
-      if (v.includes("undefined") || v.includes("NaN")) {
-        throw new Error(`suspicious 'undefined'/'NaN' in innerHTML: ...${v.slice(Math.max(0, v.search(/undefined|NaN/) - 80), v.search(/undefined|NaN/) + 40)}...`);
-      }
-    },
-  });
-  return el;
-};
-const els = new Map();
-const doc = {
-  querySelector(sel){ if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); },
-  querySelectorAll(){ return []; },
-  addEventListener(){}, createElement(){ return makeEl(); }, createTextNode(t){ return { t }; },
-};
-const sandbox = { document: doc, window: { innerWidth: 1280, innerHeight: 800 }, console, clearTimeout, setTimeout: () => 0 };
+const sandbox = baseSandbox();
 vm.createContext(sandbox);
 vm.runInContext(src, sandbox, { filename: "artifact.js" });
 

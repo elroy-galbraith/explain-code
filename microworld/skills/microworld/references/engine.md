@@ -54,17 +54,21 @@ Rules that keep this robust:
 ## Verification harness (run before showing anyone)
 
 Pattern (worked example: `scripts/check.example.mjs` in this skill directory):
-extract the page's `<script>` body, run it in `node:vm` with a ~40-line DOM
-stub, then run assertions *inside the same context* so they see the page's real
-top-level bindings. The screenshot pass has a worked example too:
-`scripts/shot.example.mjs`.
+extract the page's `<script>` body, run it in `node:vm` with a DOM stub, then
+run assertions *inside the same context* so they see the page's real top-level
+bindings. The DOM stub and script-extraction are shared, importable code —
+`scripts/dom-stub.mjs` — not something to hand-retype per build; only the
+assertions (below) are specific to each micro-world's own data model. The
+screenshot pass has a worked example too: `scripts/shot.example.mjs`, built on
+the shared `scripts/screenshot-helpers.mjs`.
 
-DOM stub essentials: `document.querySelector` returns memoized stub elements
-(`classList`, `addEventListener`, `setAttribute/getAttribute`, `querySelectorAll → []`,
-`style`, `hidden`); `document.querySelectorAll → []`; an `innerHTML` **setter that
-validates** — throw on unbalanced `<div>/<span>/<table>/<tr>/<td>/<button>/<pre>`
-counts and on `undefined`/`NaN` appearing in the string. That setter is the
-workhorse: it turns every render into an assertion.
+DOM stub essentials (`dom-stub.mjs`): `document.querySelector` returns memoized
+stub elements (`classList`, `addEventListener`, `setAttribute/getAttribute`,
+`querySelectorAll → []`, `style`, `hidden`); `document.querySelectorAll → []`;
+an `innerHTML` **setter that validates** — throw on unbalanced
+`<div>/<span>/<table>/<tr>/<td>/<button>/<pre>` counts and on `undefined`/`NaN`
+appearing in the string. That setter is the workhorse: it turns every render
+into an assertion.
 
 Assert at minimum:
 1. Every derived text variant `!==` its base, and contains a distinguishing
@@ -83,11 +87,13 @@ sentinel characters as `\u0001`-style escapes, never as literal control bytes.
 
 `playwright-core` + the pre-installed Chromium
 (`executablePath: '/opt/pw-browsers/chromium'`, don't `playwright install`).
-Shoot both `colorScheme: 'light'` and `'dark'` at representative steps: briefing,
-one mid-phase step, the fork, a failure step, the finale, the compare modal
-(use `page.evaluate(() => go(n))` to jump). Look for: label/tick collisions,
-overflow, unreadable contrast, fixed-footer overlap. The harness cannot see any
-of these.
+`screenshot-helpers.mjs`'s `shootBothThemes(url, out, steps)` owns the
+browser/context/theme boilerplate; a build only supplies the step list (what
+to click/evaluate before each shot). Shoot both `colorScheme: 'light'` and
+`'dark'` at representative steps: briefing, one mid-phase step, the fork, a
+failure step, the finale, the compare modal (use `evaluate: () => go(n)` to
+jump). Look for: label/tick collisions, overflow, unreadable contrast,
+fixed-footer overlap. The harness cannot see any of these.
 
 Standing chart rules (each earned by a screenshot catch in a real build):
 - An end-anchored axis caption and the last tick label(s) will collide — leave

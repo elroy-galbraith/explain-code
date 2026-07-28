@@ -1,42 +1,23 @@
 // Worked example: screenshot pass pattern, originally written against
 // docs/microworlds/automl-openevolve-seeding.html.
-// Requires: npm install playwright-core; uses the pre-installed Chromium.
+// The browser/context/theme boilerplate is shared (screenshot-helpers.mjs);
+// only the step list below (what to click/evaluate before each shot) is
+// specific to this world's UI. Adapt it for each new micro-world.
 // Run from the repo root, with <name> and the output directory replaced for your build.
-import { chromium } from "playwright-core";
-import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { shootBothThemes } from "./screenshot-helpers.mjs";
 
 const url = "file://" + path.resolve("docs/microworlds/<name>.html");
 const out = path.resolve("tmp-screenshots");
-mkdirSync(out, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
-
-async function shots(scheme, tag) {
-  const ctx = await browser.newContext({ viewport: { width: 1360, height: 900 }, colorScheme: scheme });
-  const page = await ctx.newPage();
-  page.on("console", m => { if (m.type() === "error") console.log("CONSOLE ERROR:", m.text()); });
-  page.on("pageerror", e => console.log("PAGE ERROR:", e.message));
-  await page.goto(url);
-  await page.screenshot({ path: `${out}/1-briefing-${tag}.png` });
-  await page.click("#brief-close");
-  await page.screenshot({ path: `${out}/2-mission-${tag}.png` });
-  await page.evaluate(() => go(8));   // mid-AutoML
-  await page.screenshot({ path: `${out}/3-automl-${tag}.png` });
-  await page.evaluate(() => go(15));  // seed decision
-  await page.screenshot({ path: `${out}/4-seed-${tag}.png` });
-  await page.evaluate(() => go(20));  // gen 5 (simple seed: KNN corrected)
-  await page.screenshot({ path: `${out}/5-gen5-${tag}.png`, fullPage: true });
-  await page.evaluate(() => go(19));  // gen 4 — the failure
-  await page.screenshot({ path: `${out}/6-fail-${tag}.png`, fullPage: true });
-  await page.evaluate(() => go(31));  // verdict
-  await page.screenshot({ path: `${out}/7-final-${tag}.png`, fullPage: true });
-  await page.evaluate(() => openCompare());
-  await page.screenshot({ path: `${out}/8-compare-${tag}.png`, fullPage: true });
-  await ctx.close();
-}
-
-await shots("light", "light");
-await shots("dark", "dark");
-await browser.close();
+await shootBothThemes(url, out, [
+  { name: "1-briefing" },
+  { click: "#brief-close", name: "2-mission" },
+  { evaluate: () => go(8), name: "3-automl" },               // mid-AutoML
+  { evaluate: () => go(15), name: "4-seed" },                 // seed decision
+  { evaluate: () => go(20), name: "5-gen5", fullPage: true }, // gen 5 (simple seed: KNN corrected)
+  { evaluate: () => go(19), name: "6-fail", fullPage: true }, // gen 4 — the failure
+  { evaluate: () => go(31), name: "7-final", fullPage: true },// verdict
+  { evaluate: () => openCompare(), name: "8-compare", fullPage: true },
+]);
 console.log("done");
