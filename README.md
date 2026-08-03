@@ -62,15 +62,37 @@ that's a problem with the local `git` binary, not with this repository — this
 marketplace has no `.gitmodules` and none of its plugins use git submodules.
 Claude Code runs a submodule-init step as part of every marketplace clone
 regardless of whether the target repo has any, so it surfaces this error if
-your `git` doesn't support the `submodule` subcommand. Common causes:
+your `git` doesn't support the `submodule` subcommand.
 
-- **An incomplete or non-standard `git` install.** Run `git submodule --help`
-  directly; if that also fails, reinstall a full git distribution (e.g. via
-  [git-scm.com](https://git-scm.com/downloads), Homebrew (`brew install git`),
-  or your OS package manager) rather than a minimal/embedded one.
-- **A `git` on your `PATH` that isn't real git.** Run `which -a git` (or
-  `where git` on Windows) and check for a wrapper script, alias, or shim
-  ahead of the real binary, then fix your `PATH` or the shim.
+Also make sure you're running `/plugin marketplace add` from an interactive
+Claude Code CLI session or the Cowork desktop app — it's a slash command, so
+it isn't available in a remote/cloud Claude Code session.
+
+Diagnose with:
+
+```bash
+which -a git
+ls "$(git --exec-path)" | grep submodule
+```
+
+- If `which -a git` lists more than one path, your shell may be resolving a
+  `git` binary that doesn't match the helper scripts (like `git-submodule`)
+  it finds at runtime — the most common cause on macOS is having both Xcode
+  Command Line Tools' git and Homebrew's git installed.
+- If the `ls` doesn't list `git-submodule`, your git install is missing
+  pieces at that exec-path.
+
+Fix, depending on which git you use:
+
+- **Homebrew**: `brew reinstall git` (or `brew upgrade git` if it's outdated)
+- **Xcode Command Line Tools**: `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install`,
+  then reopen your terminal
+- **Other platforms**: reinstall a full git distribution (e.g. via
+  [git-scm.com](https://git-scm.com/downloads) or your OS package manager)
+  rather than a minimal/embedded one
+
+Confirm the fix with `git submodule --help` before retrying
+`/plugin marketplace add`.
 
 ## What's inside
 
