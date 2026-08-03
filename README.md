@@ -49,6 +49,51 @@ In an interactive Claude Code / Cowork session:
 You can also install the packaged `.plugin` file directly in the Cowork desktop
 app by dropping it into a chat.
 
+### Troubleshooting: `git: 'submodule' is not a git command`
+
+If `/plugin marketplace add` fails while cloning with an error like:
+
+```
+Failed to clone marketplace repository: Cloning into '...'...
+git: 'submodule' is not a git command. See 'git --help'.
+```
+
+that's a problem with the local `git` binary, not with this repository — this
+marketplace has no `.gitmodules` and none of its plugins use git submodules.
+Claude Code runs a submodule-init step as part of every marketplace clone
+regardless of whether the target repo has any, so it surfaces this error if
+your `git` doesn't support the `submodule` subcommand.
+
+Also make sure you're running `/plugin marketplace add` from an interactive
+Claude Code CLI session or the Cowork desktop app — it's a slash command, so
+it isn't available in a remote/cloud Claude Code session.
+
+Diagnose with:
+
+```bash
+which -a git
+ls "$(git --exec-path)" | grep submodule
+```
+
+- If `which -a git` lists more than one path, your shell may be resolving a
+  `git` binary that doesn't match the helper scripts (like `git-submodule`)
+  it finds at runtime — the most common cause on macOS is having both Xcode
+  Command Line Tools' git and Homebrew's git installed.
+- If the `ls` doesn't list `git-submodule`, your git install is missing
+  pieces at that exec-path.
+
+Fix, depending on which git you use:
+
+- **Homebrew**: `brew reinstall git` (or `brew upgrade git` if it's outdated)
+- **Xcode Command Line Tools**: `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install`,
+  then reopen your terminal
+- **Other platforms**: reinstall a full git distribution (e.g. via
+  [git-scm.com](https://git-scm.com/downloads) or your OS package manager)
+  rather than a minimal/embedded one
+
+Confirm the fix with `git submodule --help` before retrying
+`/plugin marketplace add`.
+
 ## What's inside
 
 ```
