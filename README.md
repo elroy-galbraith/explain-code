@@ -49,6 +49,29 @@ In an interactive Claude Code / Cowork session:
 You can also install the packaged `.plugin` file directly in the Cowork desktop
 app by dropping it into a chat.
 
+### Troubleshooting: `git: 'submodule' is not a git command`
+
+If `/plugin marketplace add` fails while cloning with an error like:
+
+```
+Failed to clone marketplace repository: Cloning into '...'...
+git: 'submodule' is not a git command. See 'git --help'.
+```
+
+that's a problem with the local `git` binary, not with this repository — this
+marketplace has no `.gitmodules` and none of its plugins use git submodules.
+Claude Code runs a submodule-init step as part of every marketplace clone
+regardless of whether the target repo has any, so it surfaces this error if
+your `git` doesn't support the `submodule` subcommand. Common causes:
+
+- **An incomplete or non-standard `git` install.** Run `git submodule --help`
+  directly; if that also fails, reinstall a full git distribution (e.g. via
+  [git-scm.com](https://git-scm.com/downloads), Homebrew (`brew install git`),
+  or your OS package manager) rather than a minimal/embedded one.
+- **A `git` on your `PATH` that isn't real git.** Run `which -a git` (or
+  `where git` on Windows) and check for a wrapper script, alias, or shim
+  ahead of the real binary, then fix your `PATH` or the shim.
+
 ## What's inside
 
 ```
