@@ -197,6 +197,30 @@ def test_shuffle():
 
 
 # --------------------------------------------------------------------------- #
+# --fragment mode (for publishing as a Claude Artifact)
+# --------------------------------------------------------------------------- #
+
+def test_fragment():
+    print("fragment mode:")
+    spec = {"slug": "s", "title": "A Fragment Title", "quiz": _balanced_quiz()}
+
+    full = render.render(spec)
+    check("standalone render has a doctype", full.lstrip().startswith("<!DOCTYPE html>"))
+    check("standalone render has html/head/body tags",
+          "<html " in full and "<head>" in full and "<body>" in full)
+
+    fragment = render.render(spec, fragment=True)
+    check("fragment starts with <title>", fragment.startswith("<title>"))
+    check("fragment has no doctype", "<!DOCTYPE" not in fragment)
+    check("fragment has no html/head/body tags",
+          "<html " not in fragment and "<head>" not in fragment and "<body>" not in fragment)
+    check("fragment carries the title text", "A Fragment Title" in fragment)
+    check("fragment carries the same CSS", render.CSS in fragment)
+    check("fragment carries the same JS", render.JS in fragment)
+    check("fragment renders the quiz content too", "id=\"quiz\"" in fragment)
+
+
+# --------------------------------------------------------------------------- #
 # The bundled sample must stay clean (it is what authors copy from)
 # --------------------------------------------------------------------------- #
 
@@ -215,6 +239,7 @@ def main():
     test_structural()
     test_length_bias()
     test_shuffle()
+    test_fragment()
     test_sample()
 
     failed = [name for name, ok in _results if not ok]

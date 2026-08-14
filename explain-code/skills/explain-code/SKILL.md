@@ -100,8 +100,34 @@ policy that encodes it.
    the wordiest option" would beat the check — so fix and re-run if it complains
    (it also prints a non-blocking warning for a milder length tell). It needs only
    the Python 3 standard library — no packages to install.
-4. **Deliver the `.html` file** to the user (in Cowork, use SendUserFile). Mention
-   they can open it in any browser, and save or import it if they want to keep it.
+4. **Deliver it.** Always keep the standalone `.html` file from step 3 — it's the
+   part that's safe to email, attach, or archive — but *how you hand it to the
+   reader* depends on what this session can do, because Claude Code's own inline
+   HTML preview doesn't reliably render a page this size across every surface. Pick
+   the best option your current tools support, in this order:
+   - **`Artifact` tool available** (Cowork, claude.ai, and similar sessions): render
+     a second copy with `--fragment` —
+     `python3 "<this-skill-dir>/scripts/render.py" spec.json --fragment -o <slug>-fragment.html` —
+     and publish *that* file with the `Artifact` tool (follow its own instructions,
+     including `artifact-design` if it asks for it). This renders server-side, so
+     it can't fall prey to whatever's flaky about in-chat HTML preview. Share the
+     artifact link as the primary way to open it, and still mention the standalone
+     file for keeping.
+   - **No `Artifact` tool, but `SendUserFile` is available** (e.g. Cowork without
+     artifact access): send the standalone `.html` file with `SendUserFile`.
+   - **Plain terminal/CLI session**: try opening the standalone file directly in
+     the user's default browser with the OS-appropriate command — `open <file>` on
+     macOS, `xdg-open <file>` on Linux, `start "" <file>` on Windows — so it lands
+     in a real browser tab instead of any in-app preview. Don't treat a failure as
+     fatal: a headless or remote session has no display to open a browser on, so
+     silently fall through to just telling the user the path.
+   - **Always** state the file's path regardless of which of the above worked, so
+     the reader has a fallback — they can open it by hand, save it, or import it
+     into a wiki/Notion page.
+
+   Don't report the explanation as "ready" on the strength of an in-chat preview
+   alone — confirm it rendered (artifact published, file sent, or browser opened)
+   before calling the delivery done.
 
 ## JSON spec schema
 
