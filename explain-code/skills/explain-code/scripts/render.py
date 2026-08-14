@@ -29,6 +29,14 @@ Usage
 -----
     python3 render.py spec.json -o out.html
     cat spec.json | python3 render.py -           # read stdin, write stdout
+    python3 render.py spec.json --fragment -o out.html   # for Claude Artifacts
+
+`--fragment` emits a body-only fragment (starts at `<title>`, no
+`<!DOCTYPE>`/`<html>`/`<head>`/`<body>` tags) instead of a standalone document —
+that's the shape the Claude Artifact tool wraps itself, and it renders the page
+independently of whatever HTML preview a given chat surface does or doesn't
+support. The default (no flag) output stays a complete, self-contained file
+that opens directly in any browser and is safe to email or archive.
 
 Spec schema (see SKILL.md for the authoritative version)
 --------------------------------------------------------
@@ -321,9 +329,11 @@ CSS = """
     --accent:#2563eb;--ok:#16a34a;--bad:#dc2626;--card:#f7f8fa;--radius:10px;
   }
   @media (prefers-color-scheme:dark){
-    :root{--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa4af;--line:#262b33;
+    :root:not([data-theme="light"]){--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa4af;--line:#262b33;
       --accent:#60a5fa;--ok:#4ade80;--bad:#f87171;--card:#161a20;}
   }
+  :root[data-theme="dark"]{--bg:#0f1115;--fg:#e6e8eb;--muted:#9aa4af;--line:#262b33;
+    --accent:#60a5fa;--ok:#4ade80;--bad:#f87171;--card:#161a20;}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);
     font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
@@ -446,7 +456,7 @@ JS = """
 """
 
 
-def render(spec):
+def render(spec, fragment=False):
     data = _process(spec)
     e = html.escape
 
@@ -490,16 +500,7 @@ def render(spec):
     <div id="quiz-result" class="verdict" hidden></div>
   </section>'''
 
-    return f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{e(data["title"])}</title>
-<style>{CSS}</style>
-</head>
-<body>
-<div class="wrap">
+    body = f'''<div class="wrap">
   <header class="page">
     <h1>{e(data["title"])}</h1>
     {subtitle}
@@ -515,7 +516,27 @@ def render(spec):
 {quiz_html}
   </div>
 </div>
-<script>{JS}</script>
+<script>{JS}</script>'''
+
+    if fragment:
+        # No <!DOCTYPE>/<html>/<head>/<body> — this is the shape the Claude
+        # Artifact tool wraps itself. It scans for a leading <title> to name
+        # the artifact, so that has to stay the first tag.
+        return f'''<title>{e(data["title"])}</title>
+<style>{CSS}</style>
+{body}
+'''
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(data["title"])}</title>
+<style>{CSS}</style>
+</head>
+<body>
+{body}
 </body>
 </html>
 '''
@@ -529,6 +550,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Render an explain-code JSON spec to HTML.")
     ap.add_argument("spec", help="Path to JSON spec, or '-' for stdin.")
     ap.add_argument("-o", "--output", help="Output HTML path (default: stdout).")
+    ap.add_argument(
+        "--fragment", action="store_true",
+        help="Emit a body-only fragment (starts at <title>; no doctype/html/head/"
+             "body) for publishing as a Claude Artifact, instead of a standalone file.",
+    )
     args = ap.parse_args(argv)
 
     raw = sys.stdin.read() if args.spec == "-" else open(args.spec, encoding="utf-8").read()
@@ -538,7 +564,7 @@ def main(argv=None):
         sys.exit(f"render.py: invalid JSON spec: {ex}")
 
     try:
-        out = render(spec)
+        out = render(spec, fragment=args.fragment)
     except ValueError as ex:
         sys.exit(f"render.py: {ex}")
 
