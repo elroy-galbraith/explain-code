@@ -105,6 +105,14 @@ Two constraints when you run it:
 
 If the humanizer skill is not installed, skip this pass and apply the rules above by hand.
 
+**Optional second pass — `simplified-technical-english` for non-native audiences.** When Step 1 established that non-native English readers are in the audience, or the plan will be translated, run the **simplified-technical-english** skill (also in this marketplace) in its `lite` profile after humanizer. It enforces mechanically what Step 1 asks for by judgement: sentence caps, one term per concept, no phrasal verbs or idioms, active voice with the actor named, and no four-noun pile-ups.
+
+Three constraints:
+
+- **Order is fixed: humanizer first, STE second.** They pull opposite ways — humanizer removes tells to produce natural voice, STE imposes a deliberately uniform register that humanizer would read as machine-written and undo. Running humanizer last reintroduces synonym variation, which breaks the most valuable STE rule.
+- **Optional, not default.** A plan for a native-English leadership audience reads flatter under STE without gaining anything. Skip it unless the audience justifies it.
+- **Keep what STE doesn't supply.** Same boundary as humanizer: counts in parentheses ("9.5% (2 of 21)"), forecast ranges, and inline-defined jargon are this skill's, and STE will not add them back.
+
 ### Step 7 — Be visibly honest about uncertainty
 
 Always include a "Caveats" or "Important Caveat" section. Specifically:
