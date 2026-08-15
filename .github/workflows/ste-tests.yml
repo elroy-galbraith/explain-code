@@ -1,0 +1,60 @@
+name: STE checker tests
+
+# Runs the check_ste.py test suite. Two things it guards that aren't obvious:
+#
+#   1. check_ste.py parses its word lists straight out of
+#      references/engineering-vocabulary.md, so an innocuous formatting edit to
+#      that markdown table can silently disarm the word-choice rule with no error
+#      anywhere. The suite asserts the tables still parse and still contain known
+#      entries, which is why the workflow watches the references/ directory too.
+#   2. The checker reports at error level, so a false positive is worse than a
+#      miss — authors stop trusting it. The regression cases (phrasal verbs
+#      reading as noun clusters, adjectival -ed reading as passive) are pinned.
+#
+# Pure Python 3 standard library — no install step needed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "simplified-technical-english/**"
+      - ".github/workflows/ste-tests.yml"
+  pull_request:
+    paths:
+      - "simplified-technical-english/**"
+      - ".github/workflows/ste-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run check_ste.py test suite
+        run: |
+          python3 simplified-technical-english/skills/simplified-technical-english/scripts/test_check_ste.py
+
+      - name: Verify the checker runs clean on a conforming sample
+        run: |
+          set -euo pipefail
+          CHECKER=simplified-technical-english/skills/simplified-technical-english/scripts/check_ste.py
+          tmp=$(mktemp)
+          cat > "$tmp" <<'EOF'
+          # How the gateway checks a request
+
+          The gateway validates the token on every request. If the token is not
+          valid, the gateway rejects the request with a 401 error. The client must
+          then get a new token.
+
+          If the queue depth is more than 10,000, restart the worker.
+          EOF
+          python3 "$CHECKER" "$tmp" --profile strict

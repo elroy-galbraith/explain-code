@@ -1,0 +1,19 @@
+{
+  "name": "simplified-technical-english",
+  "version": "0.1.0",
+  "description": "Rewrite technical prose into Simplified Technical English (ASD-STE100) so it reads clearly for non-native speakers, translators, and readers skimming under time pressure. Ships a lite profile tuned for software documentation, a strict profile for conformance work, and a stdlib-only checker for sentence length, passive voice, noun clusters, phrasal verbs, idioms, and terminology drift.",
+  "author": {
+    "name": "Elroy Galbraith"
+  },
+  "license": "MIT",
+  "keywords": [
+    "simplified-technical-english",
+    "ASD-STE100",
+    "STE",
+    "controlled-language",
+    "plain-language",
+    "technical-writing",
+    "localisation",
+    "documentation"
+  ]
+}

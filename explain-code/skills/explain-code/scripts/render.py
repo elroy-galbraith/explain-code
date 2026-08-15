@@ -44,6 +44,11 @@ Spec schema (see SKILL.md for the authoritative version)
   "title": "Rate limiter migration",
   "subtitle": "PR #482 · auth-service",          # optional
   "slug": "2026-07-20-rate-limiter",              # used for filename + shuffle seed
+  "language": "ste",                              # optional, and ignored here: it
+                                                  # records that the author wrote
+                                                  # the prose in Simplified
+                                                  # Technical English. Nothing in
+                                                  # the rendered page changes.
   "gate": [                                        # 2-3 quick diagnostic questions
     {"prompt": "...", "options": [
         {"text": "...", "correct": true},

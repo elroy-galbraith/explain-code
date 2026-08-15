@@ -1,7 +1,8 @@
 # explain-code marketplace
 
-A small Claude Code / Cowork plugin marketplace with three plugins: **explain-code**,
-**improvement-plan**, and **humanizer**.
+A small Claude Code / Cowork plugin marketplace for explaining engineering work:
+**explain-code**, **improvement-plan**, **simplified-technical-english**,
+**humanizer**, and **microworld**.
 
 `explain-code` turns a piece of code — a change (diff/branch/PR), a whole feature,
 a module, or an unfamiliar codebase — into a single self-contained HTML page
@@ -35,6 +36,29 @@ guide. It works on its own on any text, and `improvement-plan` calls it as a fin
 pass so plans land in plain, human language for non-technical and non-native
 readers.
 
+`simplified-technical-english` is the other language pass: it rewrites prose into
+ASD-STE100 Simplified Technical English so it survives a tired, rushed, or
+second-language reader. Short sentences, one term per concept, active voice with
+the actor named, no idioms or phrasal verbs, and no four-noun pile-ups
+(`user session token refresh handler` → `the handler that refreshes session
+tokens`). Because the standard was written for aerospace maintenance manuals, it
+ships a `lite` profile tuned for software prose alongside the `strict`
+conformance profile, and it never touches code, identifiers, or Technical Names.
+A stdlib-only checker catches the mechanical violations a rewriter misses by
+reading for meaning rather than counting.
+
+**The two language passes have a fixed order: `humanizer` first, then
+`simplified-technical-english`.** They pull in opposite directions — humanizer
+removes tells to produce natural voice, STE imposes a deliberately uniform
+register that humanizer reads as machine-written and would undo. `explain-code`
+applies STE to section summaries and quiz prompts only (opt in with
+`"language": "ste"` in the spec); `improvement-plan` offers it as an optional
+pass when non-native readers are in the audience.
+
+`microworld` builds an interactive, scrubbable HTML simulation of one mechanism
+in a repo — grounded in its real code and recorded numbers — for when someone
+needs to *inhabit* a system rather than read about it.
+
 ## Install
 
 In an interactive Claude Code / Cowork session:
@@ -43,7 +67,9 @@ In an interactive Claude Code / Cowork session:
 /plugin marketplace add elroy-galbraith/explain-code
 /plugin install explain-code@explain-code-marketplace
 /plugin install improvement-plan@explain-code-marketplace
+/plugin install simplified-technical-english@explain-code-marketplace
 /plugin install humanizer@explain-code-marketplace
+/plugin install microworld@explain-code-marketplace
 ```
 
 You can also install the packaged `.plugin` file directly in the Cowork desktop
@@ -68,6 +94,23 @@ improvement-plan/                   # the improvement-plan plugin
 ├── .claude-plugin/plugin.json      # plugin manifest
 └── skills/improvement-plan/
     └── SKILL.md                    # the skill instructions (structure, language rules, skeleton)
+simplified-technical-english/       # the STE plugin
+├── .claude-plugin/plugin.json      # plugin manifest
+└── skills/simplified-technical-english/
+    ├── SKILL.md                    # profiles, process, ordering with the other passes
+    ├── references/
+    │   ├── rules.md                # rule categories, paraphrased, with software examples
+    │   └── engineering-vocabulary.md   # substitutions + synonym groups (the checker's data)
+    └── scripts/
+        ├── check_ste.py            # the mechanical checker
+        └── test_check_ste.py       # its test suite
+microworld/                         # the microworld plugin
+├── .claude-plugin/plugin.json      # plugin manifest
+└── skills/microworld/
+    ├── SKILL.md                    # the method
+    ├── LEARNINGS.md                # accumulated build experience
+    ├── references/engine.md        # tape/snapshot architecture + harness pattern
+    └── scripts/                    # DOM stub and screenshot helpers
 ```
 
 `humanizer` isn't a directory here — it's referenced live from its upstream repo.
@@ -77,7 +120,8 @@ See [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync).
 
 Plugins in this marketplace come from two kinds of `source`:
 
-- **Authored here** (`explain-code`, `improvement-plan`) use a local path, e.g.
+- **Authored here** (`explain-code`, `improvement-plan`,
+  `simplified-technical-english`, `microworld`) use a local path, e.g.
   `"source": "./explain-code"`. Their files live in this repo.
 - **Third-party** (`humanizer`) use a GitHub source that points straight at the
   upstream repo, pinned to a tag:
@@ -124,6 +168,21 @@ Open `sample.html` in a browser. Only the Python 3 standard library is required.
 `improvement-plan` has no renderer to try — it writes its output directly as
 markdown, ready to paste into Notion or a wiki.
 
+## Try the STE checker directly
+
+```bash
+python3 simplified-technical-english/skills/simplified-technical-english/scripts/check_ste.py \
+  draft.md --profile lite
+```
+
+It reads markdown, HTML, or plain text, skips every code span, and exits non-zero
+when error-level findings remain. `--format json` for machine-readable output.
+Standard library only. Its own test suite runs the same way:
+
+```bash
+python3 simplified-technical-english/skills/simplified-technical-english/scripts/test_check_ste.py
+```
+
 ## Credits
 
 `explain-code` is built from [Geoffrey Litt](https://github.com/geoffreylitt)'s
@@ -132,6 +191,19 @@ a prompt for turning a diff into a self-contained HTML explainer with a quiz.
 This skill extends that idea to whole features, modules, and codebases (not
 just diffs), and adds a Python-rendered HTML/CSS/JS pipeline and shuffled quiz
 answers on top.
+
+`simplified-technical-english` is based on **ASD-STE100**, the Simplified Technical
+English specification maintained by the STE Maintenance Group at
+[ASD](https://www.asd-europe.org/), Brussels. ASD holds the copyright, and the
+specification may not be redistributed, so **nothing from it is copied into this
+repo**: the approved-word dictionary is not bundled, `references/rules.md`
+paraphrases the rule categories in the skill's own words with software examples,
+and `references/engineering-vocabulary.md` is an original substitution table
+written for this marketplace. Download the specification free (registration
+required) from [asd-ste100.org](https://www.asd-ste100.org/) — it is needed for
+dictionary-exact conformance work, and the skill says so rather than guessing at
+approved words. "Simplified Technical English" and "ASD-STE100" are ASD marks;
+this plugin is not affiliated with or endorsed by ASD.
 
 `humanizer` is [blader](https://github.com/blader)'s
 [humanizer](https://github.com/blader/humanizer) skill (MIT, © Siqi Chen), based on

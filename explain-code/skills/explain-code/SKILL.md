@@ -88,7 +88,9 @@ policy that encodes it.
    branch, or the feature / module / subsystem / codebase — plus enough surrounding
    code to get the real substance, before writing anything. Do not read
    `render.py` for content guidance — it is pure plumbing.
-2. **Write the JSON spec** (schema below). This is where all your effort goes.
+2. **Write the JSON spec** (schema below). This is where all your effort goes. If
+   the reader needs Simplified Technical English, set `"language": "ste"` and
+   follow the rules in that section before moving on.
 3. **Render it.** `render.py` lives in this skill's own `scripts/` directory. Call
    it by its full path (this skill's directory is given to you when the skill
    loads) so it works regardless of the current working directory:
@@ -136,11 +138,37 @@ policy that encodes it.
   "title": "Human-readable title of what's being explained",
   "subtitle": "PR #482 · service-name   (or: 'Billing feature · payments-service')",
   "slug": "YYYY-MM-DD-short-name",
+  "language": "ste",          /* optional; omit for the default prose style */
   "gate": [ /* 2-3 diagnostic questions */ ],
   "sections": [ /* the walkthrough */ ],
   "quiz": [ /* 5 questions — the post-test */ ]
 }
 ```
+
+### `language` — optional Simplified Technical English mode
+
+Omit this field and write normally. Set it to `"ste"` when the reader needs
+Simplified Technical English — the user asks for STE or plain technical English,
+the audience includes non-native English speakers, or the page will be translated.
+It's a record of intent, not a renderer switch: `render.py` ignores it, and *you*
+apply the constraint while writing.
+
+When it's set, run the `simplified-technical-english` skill (also in this
+marketplace, `lite` profile) over the spec before rendering, and apply it to:
+
+- every section `summary` — always visible, read fast, the highest-value target;
+- every `gate` and `quiz` `prompt`, and the option text.
+
+**Leave section `body` alone.** The deep walkthrough is meant to be flowing
+explanatory prose (design goal 1); flattening it into 20-word procedural sentences
+makes the onboarding read worse, which is the opposite of the point.
+
+One interaction to watch: shortening question text can trip the answer-length
+check. If you trim the correct option, trim the distractors to match — a
+conspicuously terse correct answer is the same giveaway as a wordy one, in
+reverse (design goal 4). If the skill isn't installed, apply its headline rules by
+hand — short sentences, one term per concept, no phrasal verbs or idioms, active
+voice with the actor named — and say that you did it without the skill.
 
 ### `gate` — the test-first check (2-3 questions)
 
