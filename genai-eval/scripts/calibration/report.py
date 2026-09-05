@@ -5,8 +5,12 @@ numbers than the numbers support:
 
   * The limits section comes before the figures. Someone who reads the top of
     this document and stops must already know what it cannot tell them.
-  * No interval is printed without its sample size. An interval whose n is a
-    footnote invites a reader to treat a 12-item result like a 1200-item one.
+  * No figure is printed without its sample size, and that size is the count
+    the figure was computed from - pairable units for an alpha, complete rows
+    for a correlation, comparable rows for the power baseline - never the
+    file's row count. A figure whose n is a footnote invites a reader to treat
+    a 12-item result like a 1200-item one; a figure carrying the wrong n does
+    the same while looking careful.
 """
 
 VERDICT_TEXT = {
@@ -20,11 +24,40 @@ VERDICT_TEXT = {
         "than the judge agrees with them, so automating this rubric costs "
         "measurable accuracy."
     ),
-    "no_ceiling": (
-        "No verdict is possible, because there is no ceiling to compare "
-        "against."
+}
+
+# "no_ceiling" covers three different states, and one sentence cannot describe
+# all three: the report printed a ceiling figure and then said, on the very
+# next line, that there was no ceiling to compare against. The distinction is
+# drawn here rather than in agreement_section, whose return contract is pinned
+# by a test on purpose.
+NO_VERDICT_TEXT = {
+    "no_second_rater": (
+        "No verdict is possible: with one human rater column there is no "
+        "ceiling to compare the judge against."
+    ),
+    "ceiling_undefined": (
+        "No verdict is possible: a second rater is present, but the "
+        "human-human ceiling is itself undefined, so there is still nothing "
+        "to measure the judge against."
+    ),
+    "judge_undefined": (
+        "No verdict is possible: the ceiling above is defined, but the "
+        "judge's own agreement figure is not, so the two cannot be compared."
     ),
 }
+
+
+def _verdict(agreement_result):
+    """The sentence for this verdict, read together with the ceiling's state."""
+    verdict = agreement_result["verdict"]
+    if verdict in VERDICT_TEXT:
+        return VERDICT_TEXT[verdict]
+    if agreement_result["human_human"] is None:
+        return NO_VERDICT_TEXT["no_second_rater"]
+    if not agreement_result["ceiling_available"]:
+        return NO_VERDICT_TEXT["ceiling_undefined"]
+    return NO_VERDICT_TEXT["judge_undefined"]
 
 
 def _number(value, places=3):
@@ -59,10 +92,17 @@ def render(data, agreement_result, bias_result, clusters, power_result,
         "",
     ]
     limits = list(data.notes) + list(agreement_result["notes"])
-    if agreement_result["verdict"] == "no_ceiling":
+    if agreement_result["verdict"] not in VERDICT_TEXT:
         limits.append(
             "**Gate 6 is unanswered.** Whether the judge is good enough to "
             "automate cannot be decided from this data."
+        )
+    if data.human_rater_count > 1:
+        limits.append(
+            "Only the agreement figures use every human rater column. The "
+            "length-bias probe, the disagreement clusters and the power "
+            "baseline all read `%s` alone, the first human rater column."
+            % next(iter(data.human_columns))
         )
     limits.append(
         "This report measures agreement, not correctness. A judge that agrees "
@@ -83,20 +123,34 @@ def render(data, agreement_result, bias_result, clusters, power_result,
             % _interval(agreement_result["human_human"])
         )
         lines.append("")
-    lines += [VERDICT_TEXT[agreement_result["verdict"]], ""]
+    lines += [_verdict(agreement_result), ""]
 
     lines += ["## Statistical power", ""]
     if power_result["baseline"] is None:
-        lines.append("Not computable: no comparable rows.")
+        lines.append(
+            "Not computable: no row carries both a judge score and a human "
+            "label."
+        )
     else:
         lines.append(
-            "Observed exact-agreement rate: %s over %d items."
+            "Observed exact-agreement rate: %s, n = %d rows carrying both a "
+            "judge score and a human label."
             % (_number(power_result["baseline"]), power_result["n"])
         )
         if power_result["mde"] is not None:
+            # mde_two_proportion returns the smallest detectable *proportion*,
+            # so the difference is that proportion less the baseline. Printing
+            # the proportion under a "difference" label put 0.999 beside a
+            # 0.750 baseline, which is arithmetically impossible.
             lines.append(
-                "Smallest difference this many items can detect: %s."
-                % _number(power_result["mde"])
+                "Smallest difference this many items can detect: %s, which is "
+                "an agreement rate of %s against the %s baseline, n = %d."
+                % (
+                    _number(power_result["mde"] - power_result["baseline"]),
+                    _number(power_result["mde"]),
+                    _number(power_result["baseline"]),
+                    power_result["n"],
+                )
             )
         else:
             lines.append(
@@ -105,8 +159,8 @@ def render(data, agreement_result, bias_result, clusters, power_result,
             )
         if power_result["mid"] is not None:
             lines.append(
-                "To detect a difference of %s you would need %d items; you "
-                "have %d, which is %s."
+                "To detect a difference of %s you would need %d items per "
+                "group; you have n = %d, which is %s."
                 % (
                     _number(power_result["mid"]),
                     power_result["n_required"],
@@ -120,11 +174,13 @@ def render(data, agreement_result, bias_result, clusters, power_result,
     if bias_result["length"] is not None:
         gap = bias_result["length"]["gap"]
         lines.append(
-            "Length: judge rho %s against human rho %s, gap %s."
+            "Length: judge rho %s against human rho %s, gap %s, n = %d rows "
+            "carrying a judge score, a human label and a length."
             % (
                 _number(bias_result["length"]["judge_rho"]),
                 _number(bias_result["length"]["human_rho"]),
                 _number(gap),
+                bias_result["length"]["n"],
             )
         )
         lines.append(
@@ -134,11 +190,14 @@ def render(data, agreement_result, bias_result, clusters, power_result,
         lines.append("")
     if bias_result["self_preference"] is not None:
         lines.append(
-            "Self-preference: own outputs %s against others %s, delta %s."
+            "Self-preference: own outputs %s against others %s, delta %s, "
+            "n = %d own and %d other."
             % (
                 _number(bias_result["self_preference"]["own_mean"]),
                 _number(bias_result["self_preference"]["other_mean"]),
                 _number(bias_result["self_preference"]["delta"]),
+                bias_result["self_preference"]["n_own"],
+                bias_result["self_preference"]["n_other"],
             )
         )
         lines.append("")

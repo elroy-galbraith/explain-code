@@ -17,25 +17,42 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from evalstats import agreement, bias, power
 
 
+def _pairable(units):
+    """How many units the statistic can actually use.
+
+    Krippendorff's alpha drops every unit with fewer than two present ratings,
+    so the row count overstates the sample behind the figure — with seven of
+    ten judge cells blank the report said n = 10 for a number computed from
+    three. The n printed next to a figure has to be the n it was computed
+    from, or it invites a reader to treat a three-item result as a ten-item
+    one.
+    """
+    return sum(
+        1 for unit in units if sum(1 for v in unit if v is not None) >= 2
+    )
+
+
 def _alpha_with_ci(units, level, categories, seed, n_resamples):
     """Point estimate plus interval, with both failures reported honestly."""
 
     def statistic(sample):
         return agreement.krippendorff_alpha(sample, level=level, categories=categories)
 
+    n = _pairable(units)
+
     try:
         point = statistic(units)
     except ValueError as exc:
-        return {"alpha": None, "ci": None, "n": len(units), "why": str(exc)}
+        return {"alpha": None, "ci": None, "n": n, "why": str(exc)}
 
     try:
         interval = agreement.bootstrap_ci(
             units, statistic, n_resamples=n_resamples, seed=seed
         )
     except ValueError as exc:
-        return {"alpha": point, "ci": None, "n": len(units), "why": str(exc)}
+        return {"alpha": point, "ci": None, "n": n, "why": str(exc)}
 
-    return {"alpha": point, "ci": interval, "n": len(units), "why": None}
+    return {"alpha": point, "ci": interval, "n": n, "why": None}
 
 
 def agreement_section(data, level="nominal", categories=None, seed=None,
@@ -300,40 +317,46 @@ def power_section(data, mid=None, baseline=None):
     guessing a value would produce a verdict nobody asked for.
 
     `baseline` defaults to the observed exact-agreement rate.
+
+    `n` is the number of comparable rows — rows carrying both a judge score
+    and a human label — not the file's row count. The baseline was only ever
+    computed over those, so passing the row count to the power calculation
+    credited the sample with items that contributed nothing to it.
     """
     human_name = next(iter(data.human_columns))
     human = data.human_columns[human_name]
 
+    comparable = [
+        (h, j)
+        for h, j in zip(human, data.judge_scores)
+        if h is not None and j is not None
+    ]
+    n = len(comparable)
+
     if baseline is None:
-        comparable = [
-            (h, j)
-            for h, j in zip(human, data.judge_scores)
-            if h is not None and j is not None
-        ]
         baseline = (
-            sum(1 for h, j in comparable if h == j) / len(comparable)
-            if comparable
-            else None
+            sum(1 for h, j in comparable if h == j) / n if comparable else None
         )
 
     result = {
-        "n": data.n,
+        "n": n,
+        "rows": data.n,
         "baseline": baseline,
         "mde": None,
         "mid": mid,
         "n_required": None,
         "sufficient": None,
     }
-    if baseline is None or not 0.0 < baseline < 1.0:
+    if n < 1 or baseline is None or not 0.0 < baseline < 1.0:
         return result
 
-    result["mde"] = power.mde_two_proportion(data.n, baseline)
+    result["mde"] = power.mde_two_proportion(n, baseline)
 
     if mid is not None:
         target = min(baseline + mid, 1.0 - 1e-9)
         result["n_required"] = math.ceil(
             power.n_required_two_proportion(baseline, target)
         )
-        result["sufficient"] = data.n >= result["n_required"]
+        result["sufficient"] = n >= result["n_required"]
 
     return result

@@ -80,6 +80,32 @@ class TestWithCeiling(unittest.TestCase):
             self.assertLessEqual(block["alpha"], high)
 
 
+class TestReportedCounts(unittest.TestCase):
+    """The n printed beside a figure has to be the n it was computed from."""
+
+    def test_alpha_n_counts_pairable_units_not_rows(self):
+        """Seven of ten judge cells are blank. _coincidence drops every unit
+        with fewer than two present ratings, so the figure rests on three."""
+        data = make_data(
+            [1, None, None, None, None, None, None, None, 3, 2],
+            {"human": [1, 2, 3, 1, 2, 3, 1, 2, 3, 1]},
+        )
+        result = analysis.agreement_section(data, seed=1, n_resamples=200)
+        self.assertEqual(result["judge_human"]["n"], 3)
+
+    def test_power_n_counts_comparable_rows_not_rows(self):
+        """The baseline was always computed over comparable rows only, so the
+        item count that travels with it has to be the same set."""
+        data = make_data(
+            [1, None, 3, None, 2],
+            {"human": [1, 2, 3, 1, 3]},
+        )
+        result = analysis.power_section(data)
+        self.assertEqual(result["n"], 3)
+        self.assertEqual(result["rows"], 5)
+        self.assertAlmostEqual(result["baseline"], 2 / 3, places=10)
+
+
 class TestKnownAnswer(unittest.TestCase):
     def test_judge_human_alpha_matches_a_hand_derived_value(self):
         """Four units, judge and one human. Pairs are (a,a), (a,b), (b,b),
