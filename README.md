@@ -2,7 +2,7 @@
 
 A small Claude Code / Cowork plugin marketplace for explaining engineering work:
 **explain-code**, **improvement-plan**, **simplified-technical-english**,
-**humanizer**, and **microworld**.
+**humanizer**, **microworld**, and **genai-eval**.
 
 `explain-code` turns a piece of code — a change (diff/branch/PR), a whole feature,
 a module, or an unfamiliar codebase — into a single self-contained HTML page
@@ -59,6 +59,19 @@ pass when non-native readers are in the audience.
 in a repo — grounded in its real code and recorded numbers — for when someone
 needs to *inhabit* a system rather than read about it.
 
+`genai-eval` qualifies a GenAI evaluation as a measurement instrument, before
+its numbers get trusted. Its `eval-qualify` skill runs a stdlib-only CLI over a
+CSV of judge scores and human labels and reports chance-corrected agreement
+against the human-human ceiling (not just the judge's own number), a power
+check against a stated minimum interesting difference, judge bias probes
+(length, position, self-preference, prompt sensitivity), and disagreement
+clusters for a human to name. It is deliberately more willing to report "this
+data cannot answer that" than to hand back a confident number the sample
+doesn't support — with only one human rater, for instance, there is no ceiling
+to compare against, and the report says so before any agreement figure. It
+qualifies evaluations that already produce scores; designing one from scratch
+(`eval-design`) is a later phase and doesn't exist yet.
+
 ## Install
 
 In an interactive Claude Code / Cowork session:
@@ -70,6 +83,7 @@ In an interactive Claude Code / Cowork session:
 /plugin install simplified-technical-english@explain-code-marketplace
 /plugin install humanizer@explain-code-marketplace
 /plugin install microworld@explain-code-marketplace
+/plugin install genai-eval@explain-code-marketplace
 ```
 
 You can also install the packaged `.plugin` file directly in the Cowork desktop
@@ -111,6 +125,16 @@ microworld/                         # the microworld plugin
     ├── LEARNINGS.md                # accumulated build experience
     ├── references/engine.md        # tape/snapshot architecture + harness pattern
     └── scripts/                    # DOM stub and screenshot helpers
+genai-eval/                         # the genai-eval plugin
+├── .claude-plugin/plugin.json      # plugin manifest
+├── skills/eval-qualify/
+│   └── SKILL.md                    # the skill instructions (gates, process, honesty rules)
+├── scripts/
+│   ├── calibrate.py                # CLI entry point
+│   ├── calibration/                # CSV loading, analysis orchestration, report rendering
+│   ├── evalstats/                  # stdlib-only statistics: agreement, items, power, bias, saturation
+│   └── tests/                      # 218 tests, one suite per module
+└── examples/judge-calibration/     # worked example: labels.csv + README walkthrough
 ```
 
 `humanizer` isn't a directory here — it's referenced live from its upstream repo.
@@ -181,6 +205,23 @@ Standard library only. Its own test suite runs the same way:
 
 ```bash
 python3 simplified-technical-english/skills/simplified-technical-english/scripts/test_check_ste.py
+```
+
+## Try the judge calibration directly
+
+```bash
+python3 genai-eval/scripts/calibrate.py \
+  genai-eval/examples/judge-calibration/labels.csv \
+  --level ordinal --judge-model model-a --mid 0.10 --seed 7
+```
+
+It prints a markdown calibration report: chance-corrected agreement with
+confidence intervals, the human-human ceiling, judge bias probes, a power
+check, and the observed disagreement clusters. `-o report.md` writes to a file.
+Standard library only. Its test suites run the same way:
+
+```bash
+python3 -m unittest discover -s genai-eval/scripts/tests -p "test_*.py"
 ```
 
 ## Credits

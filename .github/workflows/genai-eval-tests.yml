@@ -45,3 +45,10 @@ jobs:
       - name: Run the evalstats test suites
         run: |
           python3 -m unittest discover -s genai-eval/scripts/tests -p "test_*.py" -v
+
+      - name: Verify the CLI runs clean on the worked example
+        run: |
+          set -euo pipefail
+          python3 genai-eval/scripts/calibrate.py \
+            genai-eval/examples/judge-calibration/labels.csv \
+            --level ordinal --judge-model model-a --mid 0.10 --seed 7 > /dev/null
