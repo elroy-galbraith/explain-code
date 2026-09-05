@@ -90,7 +90,7 @@ def load_card(path):
                 "error", block,
                 "%s is present but empty. A card with none describes no "
                 "evaluation, and the gates that read this block would pass "
-                "over it vacuously — their checks iterate this list." % block,
+                "over it vacuously; their checks iterate this list." % block,
             ))
 
     for block in OBJECT_BLOCKS:

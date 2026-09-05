@@ -237,7 +237,7 @@ class TestClustersAndProbes(unittest.TestCase):
         data = make_data([1, 1, 1, 1], {"human": [1, 1, 1, 1]})
         text = render_for(data)
         self.assertNotIn("0.000", text)
-        self.assertIn("—", text)
+        self.assertIn("alpha): -", text)
 
 
 class TestTitle(unittest.TestCase):
@@ -285,7 +285,7 @@ class TestPartiallyUndefinedBiasFigures(unittest.TestCase):
             analysis.disagreement_clusters(data),
             analysis.power_section(data),
         )
-        self.assertIn("gap —", text)
+        self.assertIn("gap -,", text)
         self.assertNotIn("gap 0.000", text)
 
     def test_self_preference_delta_undefined_renders_as_a_dash(self):
@@ -308,8 +308,26 @@ class TestPartiallyUndefinedBiasFigures(unittest.TestCase):
             analysis.disagreement_clusters(data),
             analysis.power_section(data),
         )
-        self.assertIn("delta —", text)
+        self.assertIn("delta -,", text)
         self.assertNotIn("delta 0.000", text)
+
+
+class TestUndefinedPlaceholder(unittest.TestCase):
+    """The two helpers behind every figure in the report, tested directly.
+
+    Nothing above pins the placeholder itself, only its effect on rendered
+    text next to other things that happen to also be true of that text. A
+    fabricated 0.000 reads as a real measurement of nothing, so the dash is
+    the whole point.
+    """
+
+    def test_an_undefined_number_renders_as_a_dash_not_a_zero(self):
+        self.assertEqual(report._number(None), "-")
+        self.assertEqual(report._number(0.0), "0.000")
+
+    def test_an_undefined_interval_renders_as_a_dash(self):
+        self.assertEqual(report._interval(None), "-")
+        self.assertEqual(report._interval({"alpha": None, "ci": None, "n": 0}), "-")
 
 
 if __name__ == "__main__":

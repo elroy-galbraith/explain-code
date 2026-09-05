@@ -67,13 +67,13 @@ def _verdict(agreement_result):
 
 
 def _number(value, places=3):
-    return "—" if value is None else format(value, ".%df" % places)
+    return "-" if value is None else format(value, ".%df" % places)
 
 
 def _interval(block):
     """An interval always travels with the n it was computed from."""
     if block is None or block["alpha"] is None:
-        return "—"
+        return "-"
     if block["ci"] is None:
         return "%s (no interval, n = %d)" % (_number(block["alpha"]), block["n"])
     low, high = block["ci"]
@@ -207,7 +207,7 @@ def render(data, agreement_result, bias_result, clusters, power_result,
             )
         )
         lines.append(
-            "The gap is the finding, not the judge's own correlation — longer "
+            "The gap is the finding, not the judge's own correlation; longer "
             "answers are sometimes genuinely better."
         )
         lines.append("")
@@ -236,14 +236,14 @@ def render(data, agreement_result, bias_result, clusters, power_result,
         lines.append("The judge and the human never disagreed.")
     else:
         lines += [
-            "Biggest first. These are counts, not causes — name each pattern "
+            "Biggest first. These are counts, not causes; name each pattern "
             "yourself by reading the items behind it.",
             "",
             "| Human | Judge | Count | Share | Example items |",
             "|---|---|---|---|---|",
         ]
         for cluster in clusters:
-            examples = ", ".join(str(i) for i in cluster["item_ids"][:5]) or "—"
+            examples = ", ".join(str(i) for i in cluster["item_ids"][:5]) or "-"
             lines.append(
                 "| %s | %s | %d | %s | %s |"
                 % (

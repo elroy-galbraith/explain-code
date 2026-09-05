@@ -183,7 +183,7 @@ def load_labels(path, judge=None, humans=None, item_id=None, length=None,
     if guessed:
         notes.append(
             "Columns matched by name rather than stated explicitly: %s. A wrong "
-            "match here produces a confident number from the wrong data — name "
+            "match here produces a confident number from the wrong data; name "
             "the column explicitly if any of these is not what you meant."
             % "; ".join(guessed)
         )
