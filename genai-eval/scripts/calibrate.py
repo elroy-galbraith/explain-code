@@ -151,11 +151,10 @@ def main(argv=None):
                 agreement.scale_order(categories, observed)
             except ValueError as exc:
                 raise ValueError(
-                    "--categories does not describe the ratings in %s: %s. A "
-                    "scale that omits a rating makes the agreement figure come "
-                    "back undefined, and one that repeats a value quietly "
-                    "ranks the earlier position wrong; both read as a problem "
-                    "with your data rather than with your command."
+                    "--categories does not describe the ratings in %s: %s. "
+                    "Either way the agreement figure comes back undefined or "
+                    "quietly wrong, which reads as a problem with your data "
+                    "rather than with your command."
                     % (args.labels, exc)
                 )
 
