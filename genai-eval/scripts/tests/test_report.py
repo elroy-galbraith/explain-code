@@ -114,5 +114,63 @@ class TestTitle(unittest.TestCase):
         self.assertTrue(text.startswith("# Retrieval judge v4"))
 
 
+class TestPartiallyUndefinedBiasFigures(unittest.TestCase):
+    """The probe ran, but its headline number came back undefined.
+
+    This is a different state from a probe that could not run: the dict is
+    present, so the report renders that probe's line rather than listing it
+    under "Not measured". The undefined figure has to reach the reader as a
+    dash — a fabricated 0.000 there would read as a real measurement of no
+    bias, which is the opposite of what the data supports.
+    """
+
+    def test_length_gap_undefined_renders_as_a_dash(self):
+        """Humans scored every response identically, so there is no human
+        baseline to measure the judge's length preference against. judge_rho
+        is computable; the gap is not."""
+        data = make_data(
+            [1, 2, 3],
+            {"human": [3, 3, 3]},
+            lengths=[10, 20, 30],
+        )
+        bias_result = analysis.bias_section(data)
+
+        self.assertIsNotNone(bias_result["length"])
+        self.assertIsNone(bias_result["length"]["gap"])
+
+        text = report.render(
+            data,
+            analysis.agreement_section(data, seed=1, n_resamples=200),
+            bias_result,
+            analysis.disagreement_clusters(data),
+            analysis.power_section(data),
+        )
+        self.assertIn("gap —", text)
+        self.assertNotIn("gap 0.000", text)
+
+    def test_self_preference_delta_undefined_renders_as_a_dash(self):
+        """The judge's own model produced none of these responses, so there is
+        nothing to compare its scores against and delta is undefined."""
+        data = make_data(
+            [5, 3, 4],
+            {"human": [4, 4, 4]},
+            generators=["other", "other", "other"],
+        )
+        bias_result = analysis.bias_section(data, judge_model="gpt-x")
+
+        self.assertIsNotNone(bias_result["self_preference"])
+        self.assertIsNone(bias_result["self_preference"]["delta"])
+
+        text = report.render(
+            data,
+            analysis.agreement_section(data, seed=1, n_resamples=200),
+            bias_result,
+            analysis.disagreement_clusters(data),
+            analysis.power_section(data),
+        )
+        self.assertIn("delta —", text)
+        self.assertNotIn("delta 0.000", text)
+
+
 if __name__ == "__main__":
     unittest.main()
