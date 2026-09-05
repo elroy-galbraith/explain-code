@@ -49,5 +49,68 @@ class TestCohensKappa(unittest.TestCase):
             agreement.cohens_kappa([1, 1, 1], [1, 1, 1])
 
 
+# Ordinal 3x3 confusion matrix used by the weighted-kappa tests.
+#   rater A rows, rater B columns, N = 20
+#         B=1  B=2  B=3
+#   A=1     4    2    0
+#   A=2     1    5    1
+#   A=3     0    2    5
+_ORDINAL_3X3 = {
+    (1, 1): 4, (1, 2): 2, (1, 3): 0,
+    (2, 1): 1, (2, 2): 5, (2, 3): 1,
+    (3, 1): 0, (3, 2): 2, (3, 3): 5,
+}
+
+
+class TestWeightedKappa(unittest.TestCase):
+    def setUp(self):
+        self.a, self.b = _from_matrix(_ORDINAL_3X3)
+
+    def test_unweighted_known_answer(self):
+        """p_o = 14/20 = 0.70; row marginals (6, 7, 7), col marginals (5, 9, 6)
+        p_e = (6*5 + 7*9 + 7*6) / 400 = 135 / 400 = 0.3375
+        kappa = (0.70 - 0.3375) / (1 - 0.3375) = 0.3625 / 0.6625 = 29/53
+        """
+        self.assertAlmostEqual(agreement.cohens_kappa(self.a, self.b), 29 / 53, places=10)
+
+    def test_linear_known_answer(self):
+        """Agreement weights w = 1 - |i-j|/(k-1), k = 3, so w = 1, 0.5, 0.
+
+        weighted p_o = [1*(4+5+5) + 0.5*(2+1+1+2)] / 20 = 17/20 = 0.85
+        weighted p_e = [1*(30+63+42) + 0.5*(54+35+42+63)] / 400
+                     = (135 + 97) / 400 = 232/400 = 0.58
+        kappa_w = (0.85 - 0.58) / (1 - 0.58) = 0.27 / 0.42 = 9/14
+        """
+        got = agreement.weighted_kappa(self.a, self.b, weights="linear")
+        self.assertAlmostEqual(got, 9 / 14, places=10)
+
+    def test_quadratic_known_answer(self):
+        """Agreement weights w = 1 - (|i-j|/(k-1))^2, so w = 1, 0.75, 0.
+
+        weighted p_o = [1*14 + 0.75*6] / 20 = 18.5/20 = 0.925
+        weighted p_e = [1*135 + 0.75*194] / 400 = 280.5/400 = 0.70125
+        kappa_q = (0.925 - 0.70125) / (1 - 0.70125) = 0.22375 / 0.29875 = 179/239
+        """
+        got = agreement.weighted_kappa(self.a, self.b, weights="quadratic")
+        self.assertAlmostEqual(got, 179 / 239, places=10)
+
+    def test_weighting_orders_as_expected(self):
+        """Partial credit for near-misses can only raise the statistic, and
+        quadratic forgives a one-step disagreement more than linear does."""
+        plain = agreement.cohens_kappa(self.a, self.b)
+        linear = agreement.weighted_kappa(self.a, self.b, weights="linear")
+        quad = agreement.weighted_kappa(self.a, self.b, weights="quadratic")
+        self.assertLess(plain, linear)
+        self.assertLess(linear, quad)
+
+    def test_unknown_weighting_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.weighted_kappa(self.a, self.b, weights="cubic")
+
+    def test_single_category_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.weighted_kappa([1, 1], [1, 1])
+
+
 if __name__ == "__main__":
     unittest.main()
