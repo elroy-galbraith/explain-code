@@ -169,7 +169,9 @@ result. It is checkable at all only because the card records both a content
 hash and a sealing timestamp: once `eval-qualify` appends a `qualification`
 block with its own result timestamps, Gate 9 also checks that every result
 was computed *after* `sealed_at` — a result that predates the seal means the
-threshold was chosen knowing the answer.
+threshold was chosen knowing the answer. For this to be verifiable,
+`preregistration.threshold` must exist and be non-empty; a card that sets no
+threshold cannot show that a threshold was fixed before the run.
 
 | Field | Type | Required | What it's for | Gate |
 |---|---|---|---|---|
@@ -182,7 +184,7 @@ threshold was chosen knowing the answer.
 | `baselines[]` | array of strings | Recommended | What this eval's result will be compared against | — |
 | `threshold.metric` | string | Recommended | The metric the decision rule is applied to | Gate 10 (not implemented this phase) |
 | `threshold.minimum_interesting_difference` | number | Recommended | The smallest difference considered practically meaningful | Gate 7 (not implemented this phase) |
-| `threshold.decision_rule` | string | Yes — non-blank | The actual go/no-go rule applied to the result | 9 |
+| `threshold.decision_rule` | string | Yes — non-blank | The actual go/no-go rule applied to the result | Gate 10 (not implemented this phase) |
 
 ## Gates this file does not yet describe
 
