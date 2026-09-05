@@ -45,28 +45,30 @@ def cohens_kappa(a, b):
     return (p_o - p_e) / (1.0 - p_e)
 
 
-def weighted_kappa(a, b, weights="linear"):
+def weighted_kappa(a, b, weights="linear", categories=None):
     """Weighted kappa for two raters on an ordinal scale.
 
     Most rubrics are ordinal (1-5, or 1/2/3/4 for fail/weak/adequate/strong),
     and unweighted kappa treats a 4-vs-5 disagreement as harshly as a 1-vs-5.
     Weighted kappa gives partial credit for near-misses.
 
-    Categories are ordered by natural sort, so all labels must be mutually
-    comparable. `weights` is "linear" (credit falls off with distance) or
-    "quadratic" (credit falls off with squared distance, so near-misses are
-    forgiven more and far-misses punished about the same).
+    By default categories are ordered by natural sort, so all labels must be
+    mutually comparable. `weights` is "linear" (credit falls off with
+    distance) or "quadratic" (credit falls off with squared distance, so
+    near-misses are forgiven more and far-misses punished about the same).
 
-    CAVEAT — scale order comes from sort order, not meaning. This function has
-    no idea which category is "worse"; it only knows how the values sort. Feed
-    it ordered numbers (1, 2, 3, 4) or ordered single letters (a, b, c, d) so
-    that natural sort matches rubric order. Word labels sort alphabetically:
-    sorted({"fail", "weak", "adequate", "strong"}) puts "adequate" first and
-    "weak" last, which is not the rubric's order, and the function will return
-    a confident, wrong number with no warning.
+    CAVEAT: scale order needs to be stated for word labels. By default order
+    comes from sorting the rating values, which is right for 1/2/3/4 and
+    wrong for words — sorted({"fail", "weak", "adequate", "strong"}) puts
+    "adequate" first and "weak" last, which is not the rubric's order, and
+    the function returns a confident, wrong number with no warning. Pass
+    `categories` to state the order explicitly:
+    weighted_kappa(a, b, categories=["fail", "weak", "adequate", "strong"]).
+    Any rating not in that list raises.
 
     Raises ValueError on length mismatch, empty input, fewer than two distinct
-    categories, or an unknown weighting.
+    categories, an unknown weighting, or a rating outside the supplied
+    `categories`.
     """
     if weights not in ("linear", "quadratic"):
         raise ValueError("weights must be 'linear' or 'quadratic'")
@@ -76,13 +78,23 @@ def weighted_kappa(a, b, weights="linear"):
     if n == 0:
         raise ValueError("no ratings supplied")
 
-    categories = sorted(set(a) | set(b))
-    k = len(categories)
+    observed = set(a) | set(b)
+    if categories is None:
+        scale = sorted(observed)
+    else:
+        scale = list(categories)
+        unknown = observed - set(scale)
+        if unknown:
+            raise ValueError(
+                "ratings not present in the supplied categories: %s"
+                % ", ".join(sorted(str(v) for v in unknown))
+            )
+    k = len(scale)
     if k < 2:
         raise ValueError(
             "weighted kappa needs at least two distinct categories; only one in use"
         )
-    index = {c: i for i, c in enumerate(categories)}
+    index = {c: i for i, c in enumerate(scale)}
 
     def weight(i, j):
         d = abs(i - j) / (k - 1)
@@ -158,13 +170,17 @@ def fleiss_kappa(counts):
     return (p_bar - p_e) / (1.0 - p_e)
 
 
-def _coincidence(units):
+def _coincidence(units, categories=None):
     """Build Krippendorff's coincidence matrix from per-unit rating lists.
 
     Returns (matrix, values, marginals, total). Each unit contributes every
     ordered pair of its present ratings, weighted 1/(m-1) where m is how many
     ratings that unit actually has. That weighting is what lets units with
     different numbers of raters sit in the same matrix.
+
+    `categories`, when given, is the authoritative scale order; any observed
+    rating outside it raises ValueError. When None, order comes from
+    sorting the observed values, as before.
     """
     present = [[v for v in unit if v is not None] for unit in units]
     pairable = [unit for unit in present if len(unit) >= 2]
@@ -173,7 +189,17 @@ def _coincidence(units):
             "no unit has two or more ratings; alpha needs at least one pairable unit"
         )
 
-    values = sorted({v for unit in pairable for v in unit})
+    observed = {v for unit in pairable for v in unit}
+    if categories is None:
+        values = sorted(observed)
+    else:
+        values = list(categories)
+        unknown = observed - set(values)
+        if unknown:
+            raise ValueError(
+                "ratings not present in the supplied categories: %s"
+                % ", ".join(sorted(str(v) for v in unknown))
+            )
     index = {v: i for i, v in enumerate(values)}
     k = len(values)
 
@@ -248,7 +274,7 @@ _METRICS = {
 }
 
 
-def krippendorff_alpha(units, level="nominal"):
+def krippendorff_alpha(units, level="nominal", categories=None):
     """Krippendorff's alpha — chance-corrected agreement for any number of raters.
 
     `units` is one list per item holding that item's ratings, using None for a
@@ -258,12 +284,13 @@ def krippendorff_alpha(units, level="nominal"):
     `level` selects the difference function: "nominal" for unordered categories,
     "ordinal" for ranked categories, "interval" for numeric ratings.
 
-    CAVEAT — for "ordinal" and "interval", scale order comes from the natural
-    sort of the rating values themselves, not from any notion of what the
-    values mean. Encode ordered categories as ordered values: 1, 2, 3 or a, b,
-    c. Word labels like fail/weak/adequate/strong sort alphabetically
-    ("adequate" first, "weak" last), so using "ordinal" or "interval" with them
-    yields a confident, wrong answer with no warning.
+    CAVEAT: ordinal and interval levels need a scale order. By default that
+    order comes from sorting the rating values, which is right for 1/2/3 and
+    wrong for word labels — sorted(["low", "medium", "high"]) is
+    ["high", "low", "medium"], and the resulting alpha is confidently wrong
+    rather than an error. Pass `categories` to state the order explicitly:
+    krippendorff_alpha(units, level="ordinal", categories=["low", "medium", "high"]).
+    Any rating not in that list raises.
 
     Raises ValueError when no unit is pairable, the level is unknown, or every
     rating in the pairable data is identical — matching cohens_kappa,
@@ -275,7 +302,7 @@ def krippendorff_alpha(units, level="nominal"):
             "level must be one of %s" % ", ".join(sorted(_METRICS))
         )
 
-    matrix, values, marginals, total = _coincidence(units)
+    matrix, values, marginals, total = _coincidence(units, categories)
     delta = _METRICS[level](values, marginals)
     k = len(values)
 

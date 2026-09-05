@@ -455,5 +455,89 @@ class TestBootstrapCI(unittest.TestCase):
                 self.assertIn(id(unit), original_ids)
 
 
+class TestExplicitCategories(unittest.TestCase):
+    """Word-labelled ordinal scales must give the same answer as their numeric
+    encoding once the order is stated — and a demonstrably different one when
+    it is not.
+
+    The labels are chosen so that alphabetical order genuinely scrambles the
+    scale: sorted(["bad", "fine", "excellent"]) is ["bad", "excellent", "fine"],
+    which moves the disagreeing pair from adjacent to opposite ends.
+    """
+
+    NUMERIC = [[1, 1], [2, 2], [1, 2], [3, 3]]
+    WORDS = [
+        ["bad", "bad"],
+        ["fine", "fine"],
+        ["bad", "fine"],
+        ["excellent", "excellent"],
+    ]
+    ORDER = ["bad", "fine", "excellent"]
+
+    def test_ordinal_words_match_their_numeric_encoding(self):
+        """The numeric fixture is pinned at 0.79 by TestKrippendorffLevels. The
+        word fixture is the same data with labels substituted, so stating the
+        order must reproduce that number exactly."""
+        got = agreement.krippendorff_alpha(
+            self.WORDS, level="ordinal", categories=self.ORDER
+        )
+        self.assertAlmostEqual(got, 0.79, places=10)
+
+    def test_without_categories_the_scale_is_scrambled(self):
+        """Known answer for the trap itself, not merely 'something different'.
+
+        Sorted alphabetically the scale becomes bad(3) < excellent(2) < fine(3),
+        so the disagreeing bad-fine pair now spans the whole range. Its ordinal
+        delta rises from ((3+3)/2)^2 = 9 to (3+2+3 - (3+3)/2)^2 = 25, while the
+        expected-disagreement term stays 600/56. That gives
+        1 - (2*25/8) / (600/56) = 1 - 7/12 = 5/12.
+        """
+        got = agreement.krippendorff_alpha(self.WORDS, level="ordinal")
+        self.assertAlmostEqual(got, 5 / 12, places=10)
+
+    def test_interval_words_are_rejected(self):
+        """Stating an order does not make labels numeric."""
+        with self.assertRaises(TypeError):
+            agreement.krippendorff_alpha(
+                self.WORDS, level="interval", categories=self.ORDER
+            )
+
+    def test_rating_outside_the_stated_categories_raises(self):
+        units = [["bad", "fine"], ["bad", "unheard-of"]]
+        with self.assertRaises(ValueError):
+            agreement.krippendorff_alpha(
+                units, level="ordinal", categories=self.ORDER
+            )
+
+    def test_categories_none_preserves_existing_behaviour(self):
+        """Regression guard for every caller that does not pass categories."""
+        self.assertAlmostEqual(
+            agreement.krippendorff_alpha(self.NUMERIC, level="ordinal"),
+            agreement.krippendorff_alpha(
+                self.NUMERIC, level="ordinal", categories=None
+            ),
+            places=12,
+        )
+
+    def test_weighted_kappa_honours_stated_order(self):
+        """Same data twice: once labelled, once as 1/2/3. Weighted kappa must
+        not care which, given the order."""
+        a_words = ["bad", "fine", "excellent", "bad", "excellent"]
+        b_words = ["bad", "excellent", "excellent", "fine", "excellent"]
+        a_nums = [1, 2, 3, 1, 3]
+        b_nums = [1, 3, 3, 2, 3]
+        self.assertAlmostEqual(
+            agreement.weighted_kappa(a_words, b_words, categories=self.ORDER),
+            agreement.weighted_kappa(a_nums, b_nums),
+            places=12,
+        )
+
+    def test_weighted_kappa_rejects_unknown_rating(self):
+        with self.assertRaises(ValueError):
+            agreement.weighted_kappa(
+                ["bad", "surprise"], ["bad", "bad"], categories=self.ORDER
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
