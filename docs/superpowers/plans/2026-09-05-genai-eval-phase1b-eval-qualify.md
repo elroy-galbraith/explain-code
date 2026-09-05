@@ -766,9 +766,18 @@ class TestDegenerate(unittest.TestCase):
         )
 
     def test_too_few_items_for_an_interval_is_reported_not_faked(self):
-        data = make_data([1, 2], {"human": [1, 2]})
+        """One item: alpha is computable (the single unit's two ratings
+        disagree, giving 0.0), but bootstrap_ci needs at least two units. The
+        point estimate survives and the interval is honestly absent, rather
+        than a zero-width interval implying certainty."""
+        data = make_data([1], {"human": [2]})
         result = analysis.agreement_section(data, seed=1, n_resamples=100)
+        self.assertAlmostEqual(result["judge_human"]["alpha"], 0.0, places=10)
         self.assertIsNone(result["judge_human"]["ci"])
+        self.assertTrue(
+            any("confidence interval" in n.lower() for n in result["notes"]),
+            result["notes"],
+        )
 
 
 if __name__ == "__main__":
@@ -1224,8 +1233,21 @@ class TestPowerSection(unittest.TestCase):
         self.assertIsNone(result["sufficient"])
 
     def test_tiny_sample_detects_nothing(self):
+        """Three items, observed agreement 2/3. No proportion below 1.0 is
+        detectable against that baseline at n = 3, so mde is None — the honest
+        answer, and far more useful than a number."""
+        data = make_data([1, 1, 2], {"human": [1, 2, 2]})
+        result = analysis.power_section(data)
+        self.assertAlmostEqual(result["baseline"], 2 / 3, places=10)
+        self.assertIsNone(result["mde"])
+
+    def test_a_saturated_baseline_is_out_of_range_not_detectable(self):
+        """Every row agreeing gives a baseline of 1.0, which the two-proportion
+        formula cannot take. Report nothing rather than a number from a
+        degenerate input."""
         data = make_data([1] * 3, {"human": [1] * 3})
-        result = analysis.power_section(data, baseline=0.80)
+        result = analysis.power_section(data)
+        self.assertAlmostEqual(result["baseline"], 1.0, places=10)
         self.assertIsNone(result["mde"])
 ```
 
@@ -1290,7 +1312,7 @@ def power_section(data, mid=None, baseline=None):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python3 genai-eval/scripts/tests/test_analysis.py`
-Expected: PASS — `Ran 24 tests ... OK`
+Expected: PASS — `Ran 25 tests ... OK`
 
 - [ ] **Step 5: Commit**
 
@@ -1958,7 +1980,7 @@ __all__ = ["analysis", "loader", "report"]
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `python3 -m unittest discover -s genai-eval/scripts/tests -p "test_*.py"`
-Expected: PASS — 9 new CLI tests. Package total should be 209: Phase 1A's 140, plus 7 (Task 1), 20 (Task 2), 24 (Tasks 3-6 in `test_analysis.py`), 9 (Task 7), 9 (Task 8).
+Expected: PASS — 9 new CLI tests. Package total should be 210: Phase 1A's 140, plus 7 (Task 1), 20 (Task 2), 25 (Tasks 3-6 in `test_analysis.py`), 9 (Task 7), 9 (Task 8).
 
 - [ ] **Step 6: Commit**
 
