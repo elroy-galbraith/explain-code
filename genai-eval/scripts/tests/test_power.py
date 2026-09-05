@@ -129,5 +129,68 @@ class TestDiscordantCounts(unittest.TestCase):
         self.assertAlmostEqual(power.mcnemar_exact(*counts), 9 / 256, places=12)
 
 
+class TestPairedBootstrapDiff(unittest.TestCase):
+    def test_is_deterministic_for_a_fixed_seed(self):
+        a = [5, 4, 3, 5, 4, 3, 5, 4]
+        b = [2, 1, 2, 1, 2, 1, 2, 1]
+        first = power.paired_bootstrap_diff(a, b, n_resamples=200, seed=5)
+        second = power.paired_bootstrap_diff(a, b, n_resamples=200, seed=5)
+        self.assertEqual(first, second)
+
+    def test_mean_diff_is_the_observed_difference(self):
+        a = [5, 4, 3, 5, 4, 3]     # mean 4.0
+        b = [2, 1, 2, 1, 2, 1]     # mean 1.5
+        result = power.paired_bootstrap_diff(a, b, n_resamples=200, seed=5)
+        self.assertAlmostEqual(result["mean_diff"], 2.5, places=10)
+        self.assertEqual(result["n"], 6)
+
+    def test_interval_brackets_the_mean_difference(self):
+        a = [5, 4, 3, 5, 4, 3, 2, 4]
+        b = [2, 1, 2, 1, 2, 1, 3, 2]
+        result = power.paired_bootstrap_diff(a, b, n_resamples=500, seed=9)
+        low, high = result["ci"]
+        self.assertLessEqual(low, result["mean_diff"])
+        self.assertLessEqual(result["mean_diff"], high)
+
+    def test_clear_difference_excludes_zero(self):
+        a = [5] * 20 + [4] * 20
+        b = [1] * 20 + [2] * 20
+        result = power.paired_bootstrap_diff(a, b, n_resamples=500, seed=13)
+        self.assertGreater(result["ci"][0], 0.0)
+
+    def test_no_difference_includes_zero(self):
+        a = [3, 4, 2, 5, 3, 4, 2, 5, 3, 4]
+        b = [4, 3, 5, 2, 4, 3, 5, 2, 4, 3]
+        result = power.paired_bootstrap_diff(a, b, n_resamples=500, seed=13)
+        low, high = result["ci"]
+        self.assertLessEqual(low, 0.0)
+        self.assertGreaterEqual(high, 0.0)
+
+    def test_length_mismatch_raises(self):
+        with self.assertRaises(ValueError):
+            power.paired_bootstrap_diff([1, 2, 3], [1, 2])
+
+    def test_single_item_raises(self):
+        with self.assertRaises(ValueError):
+            power.paired_bootstrap_diff([1], [2])
+
+    def test_constant_difference_collapses_the_interval(self):
+        """Known answer for the interval bounds, not just the point estimate.
+
+        Every per-item difference here is exactly 3, so every resample's mean is
+        also 3 and the sorted estimate list is entirely 3.0. Both percentile
+        indices therefore select 3.0 and the interval collapses to (3.0, 3.0) —
+        a hand-derivable known answer for the bounds themselves, which the
+        bracketing and sign properties never pin.
+        """
+        a = [5, 4, 6, 5, 4, 6]
+        b = [2, 1, 3, 2, 1, 3]
+        result = power.paired_bootstrap_diff(a, b, n_resamples=200, seed=17)
+        low, high = result["ci"]
+        self.assertAlmostEqual(result["mean_diff"], 3.0, places=12)
+        self.assertAlmostEqual(low, 3.0, places=12)
+        self.assertAlmostEqual(high, 3.0, places=12)
+
+
 if __name__ == "__main__":
     unittest.main()

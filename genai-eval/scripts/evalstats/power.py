@@ -7,6 +7,8 @@ face. These functions turn "is this enough items?" into a number.
 """
 
 import math
+import random
+import statistics
 from statistics import NormalDist
 
 _NORMAL = NormalDist()
@@ -106,3 +108,42 @@ def mcnemar_exact(b, c):
     smaller = min(b, c)
     tail = sum(math.comb(n, i) for i in range(smaller + 1)) / (2 ** n)
     return min(1.0, 2.0 * tail)
+
+
+def paired_bootstrap_diff(a_scores, b_scores, n_resamples=2000, confidence=0.95,
+                          seed=None):
+    """Bootstrap interval for the mean score difference between two systems.
+
+    Use this where McNemar does not fit: ordinal rubric scores rather than
+    binary pass/fail, on the same items for both systems.
+
+    Resampling draws item *indices* and takes both systems' scores for each
+    drawn item, so the pairing survives. Resampling the two systems
+    independently would discard exactly the information that makes a paired
+    design worth running.
+
+    Returns mean_diff (mean of a minus mean of b), ci, and n. An interval that
+    excludes zero is the paired equivalent of a significant difference.
+    """
+    if len(a_scores) != len(b_scores):
+        raise ValueError("score sequences must be the same length")
+    n = len(a_scores)
+    if n < 2:
+        raise ValueError("paired bootstrap needs at least two items")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be strictly between 0 and 1")
+
+    differences = [a - b for a, b in zip(a_scores, b_scores)]
+    observed = statistics.mean(differences)
+
+    rng = random.Random(seed)
+    estimates = []
+    for _ in range(n_resamples):
+        sample = [differences[rng.randrange(n)] for _ in range(n)]
+        estimates.append(statistics.mean(sample))
+
+    estimates.sort()
+    tail = (1.0 - confidence) / 2.0
+    low = estimates[int(tail * len(estimates))]
+    high = estimates[min(len(estimates) - 1, int((1.0 - tail) * len(estimates)))]
+    return {"mean_diff": observed, "ci": (low, high), "n": n}
