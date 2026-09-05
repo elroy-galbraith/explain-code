@@ -35,6 +35,16 @@ def _objects(value):
     return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
 
 
+def _mapping(value):
+    """A block as a dict, or an empty one if the card put something else there.
+
+    Same reason as `_objects`: the loader reports the wrong shape, but it
+    returns findings instead of raising, so the gates still run over the card
+    and must not die reaching into it.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 def gate_1_decision(card):
     """Gate 1: is there a named decision-owner and an action for every outcome?
 
@@ -43,8 +53,7 @@ def gate_1_decision(card):
     of its results.
     """
     findings = []
-    raw_decision = card.get("decision")
-    decision = raw_decision if isinstance(raw_decision, dict) else {}
+    decision = _mapping(card.get("decision"))
 
     if _blank(decision.get("owner")):
         findings.append(Finding(
@@ -75,6 +84,77 @@ def gate_1_decision(card):
     return findings
 
 
+def gate_2_harm_pathways(card):
+    """Gate 2: is each measure traceable to a ranked harm pathway?
+
+    Without the trace you measure what is easy rather than what matters. The
+    *ranking* is what makes the trace mean something — an unranked list
+    justifies measuring any pathway on it equally.
+    """
+    findings = []
+    raw = _mapping(card.get("domain")).get("harm_pathways")
+    pathways = raw if isinstance(raw, list) else []
+    by_id = {p.get("id"): p for p in pathways if isinstance(p, dict)}
+
+    ranks = []
+    for index, pathway in enumerate(pathways):
+        rank = pathway.get("rank") if isinstance(pathway, dict) else None
+        if not isinstance(rank, int) or isinstance(rank, bool):
+            findings.append(Finding(
+                "error", "domain.harm_pathways[%d].rank" % index,
+                "pathway %r has no integer rank, so nothing distinguishes it "
+                "from any other" % (pathway.get("id") if isinstance(pathway, dict) else pathway,),
+                gate=2,
+            ))
+        else:
+            ranks.append((rank, index))
+
+    seen_ranks = {}
+    for rank, index in ranks:
+        if rank in seen_ranks:
+            findings.append(Finding(
+                "error", "domain.harm_pathways[%d].rank" % index,
+                "rank %d is already used by pathway %d; duplicate ranks are not "
+                "a ranking" % (rank, seen_ranks[rank]),
+                gate=2,
+            ))
+        else:
+            seen_ranks[rank] = index
+
+    referenced = set()
+    for index, construct in enumerate(card.get("constructs") or []):
+        if not isinstance(construct, dict):
+            continue
+        listed = construct.get("harm_pathways")
+        listed = listed if isinstance(listed, list) else []
+        if not listed:
+            findings.append(Finding(
+                "error", "constructs[%d].harm_pathways" % index,
+                "construct %r traces to no harm pathway" % construct.get("id"),
+                gate=2,
+            ))
+        for reference in listed:
+            referenced.add(reference)
+            if reference not in by_id:
+                findings.append(Finding(
+                    "error", "constructs[%d].harm_pathways" % index,
+                    "construct %r references unknown pathway %r"
+                    % (construct.get("id"), reference),
+                    gate=2,
+                ))
+
+    for index, pathway in enumerate(pathways):
+        identifier = pathway.get("id") if isinstance(pathway, dict) else None
+        if identifier is not None and identifier not in referenced:
+            findings.append(Finding(
+                "warning", "domain.harm_pathways[%d]" % index,
+                "pathway %r is ranked but no construct measures it" % identifier,
+                gate=2,
+            ))
+
+    return findings
+
+
 def gate_3_falsifiable(card):
     """Gate 3: can you state what output would count as evidence *against* the
     construct?
@@ -99,5 +179,6 @@ def gate_3_falsifiable(card):
 # (gate number, callable, needs_card_path). Gates 4, 5 and 9 join in later tasks.
 ALL = [
     (1, gate_1_decision, False),
+    (2, gate_2_harm_pathways, False),
     (3, gate_3_falsifiable, False),
 ]

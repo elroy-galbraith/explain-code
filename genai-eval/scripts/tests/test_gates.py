@@ -107,6 +107,98 @@ class TestGate3Falsifiable(unittest.TestCase):
         self.assertEqual(len(findings), 2)
 
 
+class TestGate2HarmPathways(unittest.TestCase):
+    def test_a_valid_card_passes(self):
+        self.assertEqual(run_gate(gates.gate_2_harm_pathways), [])
+
+    def test_a_construct_with_no_pathway_fires(self):
+        """Dropping the only reference also orphans hp1, so the warning is part
+        of the correct answer here — pin both rather than only the error."""
+        findings = run_gate(
+            gates.gate_2_harm_pathways,
+            lambda c: c["constructs"][0].update(harm_pathways=[]),
+        )
+        self.assertEqual([(f.level, f.path) for f in findings], [
+            ("error", "constructs[0].harm_pathways"),
+            ("warning", "domain.harm_pathways[0]"),
+        ])
+        self.assertEqual(findings[0].gate, 2)
+
+    def test_a_dangling_pathway_reference_fires_naming_the_id(self):
+        findings = run_gate(
+            gates.gate_2_harm_pathways,
+            lambda c: c["constructs"][0].update(harm_pathways=["hp_nope"]),
+        )
+        self.assertEqual([(f.level, f.path) for f in findings], [
+            ("error", "constructs[0].harm_pathways"),
+            ("warning", "domain.harm_pathways[0]"),
+        ])
+        self.assertIn("hp_nope", findings[0].message)
+
+    def test_an_unranked_pathway_fires(self):
+        """An unranked pathway justifies measuring anything. The ranking is the
+        part that makes the trace mean something."""
+        findings = run_gate(
+            gates.gate_2_harm_pathways,
+            lambda c: c["domain"]["harm_pathways"][0].pop("rank"),
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "domain.harm_pathways[0].rank")
+
+    def test_a_non_integer_rank_fires(self):
+        findings = run_gate(
+            gates.gate_2_harm_pathways,
+            lambda c: c["domain"]["harm_pathways"][0].update(rank="high"),
+        )
+        self.assertEqual(len(findings), 1)
+
+    def test_duplicate_ranks_fire(self):
+        """Two pathways ranked 1 is not a ranking."""
+        def mutate(card):
+            card["domain"]["harm_pathways"].append(
+                {"id": "hp2", "rank": 1, "severity": "low", "description": "d"})
+            # Measure hp2, so the only finding left is the duplicate rank.
+            card["constructs"][0]["harm_pathways"].append("hp2")
+
+        findings = run_gate(gates.gate_2_harm_pathways, mutate)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].level, "error")
+        self.assertEqual(findings[0].path, "domain.harm_pathways[1].rank")
+
+    def test_an_unreferenced_pathway_is_a_warning_not_an_error(self):
+        """Listing a pathway you chose not to measure is honest. It is worth
+        surfacing, but it is not a failure."""
+        def mutate(card):
+            card["domain"]["harm_pathways"].append(
+                {"id": "hp2", "rank": 2, "severity": "low", "description": "d"})
+
+        findings = run_gate(gates.gate_2_harm_pathways, mutate)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].level, "warning")
+
+    def test_a_wrong_shaped_domain_block_does_not_raise(self):
+        """The loader reports the shape; this gate has to survive it anyway.
+        With no readable pathways, every reference is unknown."""
+        findings = run_gate(
+            gates.gate_2_harm_pathways, lambda c: c.update(domain="healthcare"))
+        self.assertEqual([(f.level, f.path) for f in findings],
+                         [("error", "constructs[0].harm_pathways")])
+        self.assertIn("hp1", findings[0].message)
+
+    def test_a_malformed_construct_does_not_shift_the_index_of_a_real_one(self):
+        """Skip the junk entry, but keep reporting against the card as written:
+        the broken construct is the author's second, so it is [1]."""
+        def mutate(card):
+            card["constructs"].insert(0, "oops")
+            card["constructs"][1]["harm_pathways"] = []
+
+        findings = run_gate(gates.gate_2_harm_pathways, mutate)
+        self.assertEqual([(f.level, f.path) for f in findings], [
+            ("error", "constructs[1].harm_pathways"),
+            ("warning", "domain.harm_pathways[0]"),
+        ])
+
+
 class TestGatesNeverRaise(unittest.TestCase):
     """The module's contract: a gate returns findings, it does not raise.
 
