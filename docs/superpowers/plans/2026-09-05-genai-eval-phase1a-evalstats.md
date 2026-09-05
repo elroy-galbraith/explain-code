@@ -6,14 +6,14 @@
 
 **Architecture:** A small Python package at `genai-eval/scripts/evalstats/`, split by responsibility: `agreement.py` (kappa family, Krippendorff's alpha, bootstrap CIs), `items.py` (difficulty, discrimination, reliability, dimensionality), `power.py` (MDE, required-n, McNemar), `bias.py` (judge bias probes). No I/O, no CLI, no formatting — this package computes numbers and raises on degenerate input. The CSV loader, report renderer and skill body are Phase 1B.
 
-**Tech Stack:** Python 3.8+, standard library only. `unittest` for tests. GitHub Actions for CI.
+**Tech Stack:** Python 3.9+, standard library only. `unittest` for tests. GitHub Actions for CI.
 
 **Spec:** [`docs/superpowers/specs/2026-09-05-genai-eval-plugin-design.md`](../specs/2026-09-05-genai-eval-plugin-design.md) — sections 4.1, 6, 7.
 
 ## Global Constraints
 
 - **Standard library only.** No pip install step, ever. No numpy, scipy, pandas, or PyYAML. This is the rule every plugin in this repo follows and it is what lets CI run with no install step.
-- **Python floor is 3.8.** `math.comb` and `statistics.NormalDist` both require it. CI pins `python-version: "3.x"`, matching `ste-tests.yml`.
+- **Python floor is 3.9.** `math.comb` and `statistics.NormalDist` both require 3.8+; CI now runs a matrix over `["3.9", "3.x"]` so the stated floor is actually exercised, rather than pinning `python-version: "3.x"` alone (which resolves to the newest available and never checks the floor). 3.8 is end-of-life, so 3.9 is the floor CI actually verifies; the code itself remains 3.8-compatible.
 - **Every statistic needs a known-answer test.** A property test alone is not sufficient for any function that returns a number. Where this plan gives an expected value, the arithmetic that produces it is shown in the test docstring so a reviewer can check it without trusting the plan.
 - **Degenerate input raises `ValueError` or returns `None`; it never returns a plausible-looking number.** Which of the two is specified per function. Silent wrong answers are the failure mode this whole plugin exists to prevent.
 - **No file I/O and no printing anywhere in `evalstats/`.** Callers own both.
