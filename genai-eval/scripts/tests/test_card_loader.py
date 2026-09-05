@@ -106,14 +106,23 @@ class TestUnreadableInput(unittest.TestCase):
 
 class TestResolve(unittest.TestCase):
     def test_paths_resolve_against_the_cards_own_directory(self):
-        """A card and its item pool travel together; resolving against the
-        process's working directory would break the moment anyone runs the
-        validator from somewhere else."""
-        resolved = loader.resolve("/cards/x/eval-card.json", "items/pool.jsonl")
-        self.assertEqual(
-            os.path.normpath(resolved),
-            os.path.normpath("/cards/x/items/pool.jsonl"),
-        )
+        """A card and its item pool travel together, so a relative path inside
+        a card resolves against the card's own folder — not the working
+        directory of whoever happened to run the validator.
+
+        Asserted as a relationship to a real directory rather than as an
+        equality against a hard-coded path literal, because a literal only
+        agrees with itself on the platform it was written for.
+        """
+        directory = tempfile.mkdtemp()
+        card_path = os.path.join(directory, "eval-card.json")
+
+        resolved = loader.resolve(card_path, "items/pool.jsonl")
+        resolved = os.path.normpath(resolved)
+
+        self.assertEqual(os.path.dirname(os.path.dirname(resolved)), directory)
+        self.assertTrue(
+            resolved.endswith(os.path.join("items", "pool.jsonl")), resolved)
 
     def test_an_absolute_path_inside_a_card_is_left_alone(self):
         absolute = os.path.abspath(os.sep + "elsewhere" + os.sep + "pool.jsonl")
