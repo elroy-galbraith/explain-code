@@ -105,6 +105,16 @@ class TestLoadFull(unittest.TestCase):
         self.assertTrue(self.data.numeric["judge"])
         self.assertTrue(self.data.numeric["human_a"])
 
+    def test_detected_columns_are_named_so_a_wrong_guess_is_visible(self):
+        """The heuristics are guesses about someone else's file. A guess that
+        fills a role wrongly is otherwise invisible — notes only ever reported
+        absences, never mis-matches, so a mis-detected length column would feed
+        the bias probe with no signal that anything was assumed."""
+        matched = [n for n in self.data.notes if "matched by name" in n]
+        self.assertEqual(len(matched), 1, self.data.notes)
+        for column in ("item_id", "judge", "response_chars", "generator"):
+            self.assertIn(column, matched[0])
+
 
 class TestCoercionAndMissing(unittest.TestCase):
     def test_word_labels_stay_strings(self):
@@ -158,6 +168,20 @@ class TestOverridesAndErrors(unittest.TestCase):
     def test_ragged_rows_raise(self):
         with self.assertRaises(ValueError):
             loader.load_labels(write_csv("judge,human\n5,5\n4\n"))
+
+    def test_explicitly_named_columns_are_not_reported_as_guesses(self):
+        data = loader.load_labels(
+            write_csv("alpha,beta\n5,4\n3,3\n"), judge="alpha", humans=["beta"]
+        )
+        self.assertFalse(
+            [n for n in data.notes if "matched by name" in n], data.notes
+        )
+
+    def test_long_rows_raise(self):
+        """csv.DictReader stows extra fields under a None key, which is the
+        other ragged shape — the short-row case leaves None values instead."""
+        with self.assertRaises(ValueError):
+            loader.load_labels(write_csv("judge,human\n5,5\n4,5,6\n"))
 
 
 if __name__ == "__main__":

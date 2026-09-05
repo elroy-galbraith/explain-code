@@ -153,6 +153,18 @@ def load_labels(path, judge=None, humans=None, item_id=None, length=None,
             "%s); name one explicitly" % (path, ", ".join(HUMAN_HINTS))
         )
 
+    guessed = []
+    if judge is None:
+        guessed.append("%s → judge score" % judge_column)
+    if humans is None:
+        guessed.append("%s → human rater" % ", ".join(human_names))
+    if item_id is None and item_column is not None:
+        guessed.append("%s → item id" % item_column)
+    if length is None and length_column is not None:
+        guessed.append("%s → response length" % length_column)
+    if generator is None and generator_column is not None:
+        guessed.append("%s → generator" % generator_column)
+
     def column(name):
         return [row[name] for row in rows]
 
@@ -168,6 +180,13 @@ def load_labels(path, judge=None, humans=None, item_id=None, length=None,
         lengths, numeric[length_column] = _coerce(column(length_column))
 
     notes = []
+    if guessed:
+        notes.append(
+            "Columns matched by name rather than stated explicitly: %s. A wrong "
+            "match here produces a confident number from the wrong data — name "
+            "the column explicitly if any of these is not what you meant."
+            % "; ".join(guessed)
+        )
     if len(human_names) < 2:
         notes.append(
             "Only one human rater column was found, so there is no "
