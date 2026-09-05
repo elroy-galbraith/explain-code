@@ -123,6 +123,12 @@ def fleiss_kappa(counts):
             "every item must have the same number of ratings; use "
             "krippendorff_alpha for ragged or missing data"
         )
+    if any(len(row) != len(counts[0]) for row in counts):
+        raise ValueError(
+            "every item must report counts for the same number of "
+            "categories; a matching rating total does not mean the rows "
+            "are the same shape"
+        )
 
     n_items = len(counts)
     n_categories = len(counts[0])
@@ -304,6 +310,8 @@ def bootstrap_ci(units, statistic, n_resamples=2000, confidence=0.95, seed=None)
         raise ValueError("bootstrap needs at least two units")
     if not 0.0 < confidence < 1.0:
         raise ValueError("confidence must be strictly between 0 and 1")
+    if n_resamples < 1:
+        raise ValueError("n_resamples must be at least 1")
 
     rng = random.Random(seed)
     estimates = []

@@ -132,6 +132,8 @@ def paired_bootstrap_diff(a_scores, b_scores, n_resamples=2000, confidence=0.95,
         raise ValueError("paired bootstrap needs at least two items")
     if not 0.0 < confidence < 1.0:
         raise ValueError("confidence must be strictly between 0 and 1")
+    if n_resamples < 1:
+        raise ValueError("n_resamples must be at least 1")
 
     differences = [a - b for a, b in zip(a_scores, b_scores)]
     observed = statistics.mean(differences)

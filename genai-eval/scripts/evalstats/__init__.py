@@ -3,4 +3,6 @@
 No I/O, no printing, no formatting. Every function computes a number or raises.
 """
 
+from . import agreement, bias, items, power, saturation
+
 __all__ = ["agreement", "bias", "items", "power", "saturation"]

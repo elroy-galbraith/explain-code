@@ -174,6 +174,19 @@ class TestPairedBootstrapDiff(unittest.TestCase):
         with self.assertRaises(ValueError):
             power.paired_bootstrap_diff([1], [2])
 
+    def test_zero_resamples_raises(self):
+        """n_resamples=0 previously fell through to a raw IndexError from
+        indexing an empty estimates list; it must raise ValueError instead,
+        naming the parameter."""
+        with self.assertRaises(ValueError):
+            power.paired_bootstrap_diff([1, 2, 3], [2, 3, 4], n_resamples=0)
+
+    def test_out_of_range_confidence_raises(self):
+        with self.assertRaises(ValueError):
+            power.paired_bootstrap_diff([1, 2, 3], [2, 3, 4], confidence=1.5)
+        with self.assertRaises(ValueError):
+            power.paired_bootstrap_diff([1, 2, 3], [2, 3, 4], confidence=0.0)
+
     def test_constant_difference_collapses_the_interval(self):
         """Known answer for the interval bounds, not just the point estimate.
 

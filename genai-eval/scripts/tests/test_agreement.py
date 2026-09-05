@@ -136,6 +136,15 @@ class TestFleissKappa(unittest.TestCase):
         with self.assertRaises(ValueError):
             agreement.fleiss_kappa([[3, 0], [2, 0]])
 
+    def test_ragged_rows_with_matching_sums_still_raise(self):
+        """[[3, 0], [0, 1, 2]] has equal row sums (3 and 3), so the sum check
+        alone lets it through — n_categories then comes from len(counts[0])
+        == 2, and the third column of row two is invisible to the proportions
+        loop, silently producing a wrong-but-plausible kappa instead of
+        raising. A row-length check is needed alongside the sum check."""
+        with self.assertRaises(ValueError):
+            agreement.fleiss_kappa([[3, 0], [0, 1, 2]])
+
     def test_single_rater_raises(self):
         with self.assertRaises(ValueError):
             agreement.fleiss_kappa([[1, 0], [0, 1]])
@@ -323,6 +332,15 @@ class TestBootstrapCI(unittest.TestCase):
     def test_too_few_units_raises(self):
         with self.assertRaises(ValueError):
             agreement.bootstrap_ci([["a", "a"]], agreement.krippendorff_alpha)
+
+    def test_zero_resamples_raises(self):
+        """n_resamples=0 previously fell through to a raw IndexError from
+        indexing an empty estimates list; it must raise ValueError instead,
+        naming the parameter."""
+        with self.assertRaises(ValueError):
+            agreement.bootstrap_ci(
+                self._units(10, 10), agreement.krippendorff_alpha, n_resamples=0
+            )
 
     def test_homogeneous_sample_does_not_pin_the_upper_bound_to_one(self):
         """Regression test for a composition bug between two correct-looking
