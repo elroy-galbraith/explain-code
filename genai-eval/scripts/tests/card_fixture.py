@@ -21,6 +21,8 @@ POOL = [
 
 TEST_SPLIT = [POOL[2], POOL[5]]
 
+DEV_SPLIT = [POOL[0], POOL[3]]
+
 
 def _write_jsonl(path, rows):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -133,6 +135,8 @@ def write_card(directory, mutate=None, items=None, test_split=None):
     test_path = os.path.join(directory, "items", "test.jsonl")
     _write_jsonl(pool_path, POOL if items is None else items)
     _write_jsonl(test_path, TEST_SPLIT if test_split is None else test_split)
+    dev_path = os.path.join(directory, "items", "dev.jsonl")
+    _write_jsonl(dev_path, DEV_SPLIT)
 
     card = base_card()
     card["items"]["splits"]["test"]["sha256"] = sha256_of(test_path)

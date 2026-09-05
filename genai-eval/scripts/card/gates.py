@@ -8,6 +8,7 @@ Gates 6, 7, 8, 10 and 11 need a qualification block that nothing writes yet;
 they arrive with card mode. The registry at the bottom is the seam.
 """
 
+import hashlib
 import json
 
 from .loader import Finding, resolve
@@ -317,10 +318,89 @@ def gate_4_trace_matrix(card, card_path):
     return findings
 
 
-# (gate number, callable, needs_card_path). Gates 5 and 9 join in later tasks.
+def _sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def gate_5_sealed_split(card, card_path):
+    """Gate 5: is the test split sealed, and is it still the file that was sealed?
+
+    The hash is taken over raw bytes, not parsed JSON, so reformatting the file
+    trips it too. That is deliberate: "same items, different whitespace" is
+    indistinguishable from "someone edited the split" without reading the diff,
+    and the gate exists precisely to make that visible.
+
+    A mismatch is always an error. A warning here would make the gate
+    decorative.
+    """
+    findings = []
+    items = _mapping(card.get("items"))
+
+    canary = _mapping(items.get("contamination_controls")).get("canary")
+    if _blank(canary):
+        findings.append(Finding(
+            "error", "items.contamination_controls.canary",
+            "no canary string; without one, leakage into a model's training "
+            "data cannot be detected later",
+            gate=5,
+        ))
+
+    split = _mapping(_mapping(items.get("splits")).get("test"))
+
+    if split.get("sealed") is not True:
+        findings.append(Finding(
+            "error", "items.splits.test.sealed",
+            "the test split is not marked sealed", gate=5))
+
+    if _blank(split.get("sealed_at")):
+        findings.append(Finding(
+            "error", "items.splits.test.sealed_at",
+            "no seal timestamp, so nothing records when the split was fixed",
+            gate=5,
+        ))
+
+    recorded = split.get("sha256")
+    path = split.get("path")
+    if _blank(recorded):
+        findings.append(Finding(
+            "error", "items.splits.test.sha256",
+            "no recorded hash, so the split cannot be shown to be unchanged",
+            gate=5,
+        ))
+    elif _blank(path):
+        findings.append(Finding(
+            "error", "items.splits.test.path",
+            "no test split file is named", gate=5))
+    else:
+        try:
+            actual = _sha256_of(resolve(card_path, path))
+        except OSError as exc:
+            findings.append(Finding(
+                "error", "items.splits.test.path",
+                "cannot read the test split: %s" % exc, gate=5))
+        else:
+            if actual != recorded:
+                findings.append(Finding(
+                    "error", "items.splits.test.sha256",
+                    "the test split has changed since it was sealed (recorded "
+                    "%s..., found %s...); every number computed from it "
+                    "measures something other than what was sealed"
+                    % (recorded[:12], actual[:12]),
+                    gate=5,
+                ))
+
+    return findings
+
+
+# (gate number, callable, needs_card_path). Gate 9 joins in a later task.
 ALL = [
     (1, gate_1_decision, False),
     (2, gate_2_harm_pathways, False),
     (3, gate_3_falsifiable, False),
     (4, gate_4_trace_matrix, True),
+    (5, gate_5_sealed_split, True),
 ]

@@ -279,7 +279,7 @@ class TestGate4TraceMatrix(unittest.TestCase):
         findings = self._run(items=items)
         thin = [f for f in findings if "cl2" in f.message]
         self.assertEqual(len(thin), 1)
-        self.assertIn("2", thin[0].message)
+        self.assertIn("has 2 items", thin[0].message)
 
     def test_an_item_with_no_claim_id_fires(self):
         """Both claims keep three items, so the orphan is the *only* finding —
@@ -364,6 +364,96 @@ class TestGate4TraceMatrix(unittest.TestCase):
 
         findings = self._run(mutate)
         self.assertEqual([f.path for f in findings], ["claims[1].construct"])
+
+
+class TestGate5SealedSplit(unittest.TestCase):
+    def _run(self, mutate=None, tamper=None):
+        directory = tempfile.mkdtemp()
+        path = write_card(directory, mutate=mutate)
+        if tamper is not None:
+            tamper(os.path.join(directory, "items", "test.jsonl"))
+        card, _ = loader.load_card(path)
+        return gates.gate_5_sealed_split(card, path)
+
+    def test_a_valid_card_passes(self):
+        self.assertEqual(self._run(), [])
+
+    def test_a_changed_split_fires_as_an_error_never_a_warning(self):
+        """The contamination tripwire. If this ever warns instead of failing,
+        the gate is decorative — a changed split is exactly the thing sealing
+        was supposed to make impossible."""
+        def tamper(path):
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write('{"item_id": "sneaky", "claim_id": "cl1"}\n')
+
+        findings = self._run(tamper=tamper)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].gate, 5)
+        self.assertEqual(findings[0].level, "error")
+        self.assertIn("sha256", findings[0].path)
+
+    def test_sealed_false_fires(self):
+        findings = self._run(
+            lambda c: c["items"]["splits"]["test"].update(sealed=False))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "items.splits.test.sealed")
+
+    def test_a_missing_hash_fires(self):
+        findings = self._run(
+            lambda c: c["items"]["splits"]["test"].pop("sha256"))
+        self.assertEqual(len(findings), 1)
+
+    def test_a_missing_sealed_at_fires(self):
+        findings = self._run(
+            lambda c: c["items"]["splits"]["test"].pop("sealed_at"))
+        self.assertEqual(len(findings), 1)
+        self.assertIn("sealed_at", findings[0].path)
+
+    def test_a_missing_canary_fires(self):
+        findings = self._run(
+            lambda c: c["items"]["contamination_controls"].update(canary=""))
+        self.assertEqual(len(findings), 1)
+        self.assertIn("canary", findings[0].path)
+
+    def test_a_missing_split_file_is_reported_not_raised(self):
+        findings = self._run(
+            lambda c: c["items"]["splits"]["test"].update(path="items/gone.jsonl"))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].level, "error")
+
+    def test_a_recorded_hash_with_no_split_path_fires(self):
+        """The `elif` branch: the card records a hash but names no file to
+        check it against. Nothing else in this class reaches it, and untested,
+        a swapped if/elif would pass the whole suite."""
+        findings = self._run(lambda c: c["items"]["splits"]["test"].pop("path"))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "items.splits.test.path")
+        self.assertIn("no test split file is named", findings[0].message)
+
+    def test_a_wrong_shaped_items_block_does_not_raise(self):
+        """The loader reports the shape; this gate has to survive it anyway.
+        With nothing readable, all four checks fire and none of them crash."""
+        findings = self._run(lambda c: c.update(items="items/pool.jsonl"))
+        self.assertEqual([f.path for f in findings], [
+            "items.contamination_controls.canary",
+            "items.splits.test.sealed",
+            "items.splits.test.sealed_at",
+            "items.splits.test.sha256",
+        ])
+
+    def test_the_hash_is_computed_over_bytes_not_parsed_json(self):
+        """Reformatting the split — same items, different whitespace — must
+        still trip the seal. A hash over parsed content would let someone
+        rewrite the file and keep the gate green."""
+        def tamper(path):
+            with open(path, encoding="utf-8") as handle:
+                content = handle.read()
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(content.replace('", "', '",  "'))
+
+        findings = self._run(tamper=tamper)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("sha256", findings[0].path)
 
 
 class TestGatesDoNotBleed(unittest.TestCase):
