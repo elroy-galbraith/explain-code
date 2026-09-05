@@ -198,6 +198,15 @@ class TestGate2HarmPathways(unittest.TestCase):
             ("warning", "domain.harm_pathways[0]"),
         ])
 
+    def test_a_boolean_rank_fires(self):
+        """`True` is an `int` in Python, so `rank: true` sails past a bare
+        isinstance check and ranks first."""
+        findings = run_gate(
+            gates.gate_2_harm_pathways,
+            lambda c: c["domain"]["harm_pathways"][0].update(rank=True))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "domain.harm_pathways[0].rank")
+
 
 class TestGatesNeverRaise(unittest.TestCase):
     """The module's contract: a gate returns findings, it does not raise.
@@ -232,6 +241,129 @@ class TestGatesNeverRaise(unittest.TestCase):
         findings = gates.gate_3_falsifiable(card)
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].path, "constructs[0].negative_evidence")
+
+
+class TestGate4TraceMatrix(unittest.TestCase):
+    def _run(self, mutate=None, items=None):
+        path = write_card(tempfile.mkdtemp(), mutate=mutate, items=items)
+        card, _ = loader.load_card(path)
+        return gates.gate_4_trace_matrix(card, path)
+
+    def test_a_valid_card_passes(self):
+        self.assertEqual(self._run(), [])
+
+    def test_an_item_whose_claim_does_not_exist_fires(self):
+        items = [
+            {"item_id": "i1", "claim_id": "cl1"},
+            {"item_id": "i2", "claim_id": "cl1"},
+            {"item_id": "i3", "claim_id": "cl1"},
+            {"item_id": "i4", "claim_id": "cl2"},
+            {"item_id": "i5", "claim_id": "cl2"},
+            {"item_id": "i6", "claim_id": "ghost"},
+        ]
+        findings = self._run(items=items)
+        orphans = [f for f in findings if "ghost" in f.message]
+        self.assertEqual(len(orphans), 1)
+        self.assertEqual(orphans[0].gate, 4)
+
+    def test_a_claim_with_fewer_than_three_items_fires(self):
+        """Fewer than three items cannot support a claim-level reading of the
+        score, which is the whole reason for tracing items to claims."""
+        items = [
+            {"item_id": "i1", "claim_id": "cl1"},
+            {"item_id": "i2", "claim_id": "cl1"},
+            {"item_id": "i3", "claim_id": "cl1"},
+            {"item_id": "i4", "claim_id": "cl2"},
+            {"item_id": "i5", "claim_id": "cl2"},
+        ]
+        findings = self._run(items=items)
+        thin = [f for f in findings if "cl2" in f.message]
+        self.assertEqual(len(thin), 1)
+        self.assertIn("2", thin[0].message)
+
+    def test_an_item_with_no_claim_id_fires(self):
+        """Both claims keep three items, so the orphan is the *only* finding —
+        otherwise a thin-claim finding would fire too and this test would pass
+        without proving the orphan check works."""
+        items = [{"item_id": "i%d" % n, "claim_id": "cl1"} for n in range(3)]
+        items += [{"item_id": "i%d" % n, "claim_id": "cl2"} for n in range(3, 6)]
+        items += [{"item_id": "i7"}]
+        findings = self._run(items=items)
+        self.assertEqual(len(findings), 1, [f.message for f in findings])
+        self.assertIn("no claim_id", findings[0].message)
+
+    def test_a_claim_referencing_an_unknown_construct_fires(self):
+        findings = self._run(lambda c: c["claims"][0].update(construct="c_ghost"))
+        self.assertTrue(any("c_ghost" in f.message for f in findings), findings)
+
+    def test_evidence_and_task_models_must_reference_real_claims(self):
+        findings = self._run(lambda c: c["evidence_model"][0].update(claim="cl_ghost"))
+        self.assertTrue(
+            any("cl_ghost" in f.message and "evidence_model" in f.path
+                for f in findings), findings)
+
+    def test_a_claim_with_no_evidence_model_entry_fires(self):
+        findings = self._run(lambda c: c["evidence_model"].pop(1))
+        self.assertTrue(
+            any("cl2" in f.message and "evidence" in f.message.lower()
+                for f in findings), findings)
+
+    def test_a_missing_item_pool_is_reported_not_raised(self):
+        """The validator must survive a card pointing at a file that is not
+        there, and say so — that is a common state for a card in progress.
+
+        Exactly one finding: with no pool to read, every claim trivially has
+        zero items, and reporting that too would bury the one fact the author
+        can actually act on."""
+        findings = self._run(lambda c: c["items"].update(source="items/gone.jsonl"))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "items.source")
+        self.assertEqual(findings[0].level, "error")
+
+    def test_a_malformed_pool_line_is_reported_with_its_line_number(self):
+        directory = tempfile.mkdtemp()
+        path = write_card(directory)
+        with open(os.path.join(directory, "items", "pool.jsonl"), "a",
+                  encoding="utf-8") as handle:
+            handle.write("{not json\n")
+        card, _ = loader.load_card(path)
+        findings = gates.gate_4_trace_matrix(card, path)
+        self.assertTrue(any("line 7" in f.message for f in findings), findings)
+
+    def test_a_malformed_line_does_not_stop_the_surviving_rows_counting(self):
+        """A bad line is not an unreadable file. The rows that parsed still
+        have to be counted, or one typo could hide a thin claim — so this pool
+        is deliberately one short on cl2, and both findings must appear."""
+        directory = tempfile.mkdtemp()
+        items = [{"item_id": "i%d" % n, "claim_id": "cl1"} for n in range(3)]
+        items += [{"item_id": "i4", "claim_id": "cl2"},
+                  {"item_id": "i5", "claim_id": "cl2"}]
+        path = write_card(directory, items=items)
+        with open(os.path.join(directory, "items", "pool.jsonl"), "a",
+                  encoding="utf-8") as handle:
+            handle.write("{not json\n")
+        card, _ = loader.load_card(path)
+        messages = [f.message for f in gates.gate_4_trace_matrix(card, path)]
+        self.assertEqual(len(messages), 2, messages)
+        self.assertTrue(any("line 6" in m for m in messages), messages)
+        self.assertTrue(any("cl2" in m and "2 items" in m for m in messages),
+                        messages)
+
+    def test_a_wrong_shaped_items_block_does_not_raise(self):
+        """The loader reports the shape; this gate has to survive it anyway."""
+        findings = self._run(lambda c: c.update(items="items/pool.jsonl"))
+        self.assertEqual([(f.level, f.path) for f in findings],
+                         [("error", "items.source")])
+
+    def test_a_malformed_claim_does_not_shift_the_index_of_a_real_one(self):
+        """Skip the junk entry, but keep reporting against the card as the
+        author wrote it: the broken claim is their second, so it is [1]."""
+        def mutate(card):
+            card["claims"].insert(0, "oops")
+            card["claims"][1]["construct"] = "c_ghost"
+
+        findings = self._run(mutate)
+        self.assertEqual([f.path for f in findings], ["claims[1].construct"])
 
 
 class TestGatesDoNotBleed(unittest.TestCase):

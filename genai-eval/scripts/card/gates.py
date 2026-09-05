@@ -8,7 +8,9 @@ Gates 6, 7, 8, 10 and 11 need a qualification block that nothing writes yet;
 they arrive with card mode. The registry at the bottom is the seam.
 """
 
-from .loader import Finding
+import json
+
+from .loader import Finding, resolve
 
 REQUIRED_OUTCOMES = ("pass", "fail", "borderline")
 
@@ -176,9 +178,149 @@ def gate_3_falsifiable(card):
     return findings
 
 
-# (gate number, callable, needs_card_path). Gates 4, 5 and 9 join in later tasks.
+MINIMUM_ITEMS_PER_CLAIM = 3
+
+
+def _read_pool(path):
+    """Read a JSONL item pool. Returns (rows, findings).
+
+    `rows` is None when the file could not be opened at all. There is nothing
+    to count in that case, and reporting every claim as having zero items would
+    bury the one finding that matters under derivative noise. A malformed
+    *line* is a different thing: the rows that parsed still count, so those
+    come back normally alongside the finding.
+    """
+    rows, findings = [], []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError as exc:
+                    findings.append(Finding(
+                        "error", "items.source",
+                        "line %d of the item pool is not JSON: %s" % (number, exc),
+                        gate=4,
+                    ))
+    except OSError as exc:
+        findings.append(Finding(
+            "error", "items.source",
+            "cannot read the item pool: %s" % exc, gate=4))
+        return None, findings
+    return rows, findings
+
+
+def gate_4_trace_matrix(card, card_path):
+    """Gate 4: does every item trace to a claim, and every claim to 3+ items?
+
+    This is what makes a score readable at the claim level. Without it the
+    number says the system did well overall and cannot say what it did well at,
+    which is the difference between a result and a leaderboard entry.
+    """
+    findings = []
+    construct_ids = {c.get("id") for c in _objects(card.get("constructs"))}
+    claims = card.get("claims") or []
+    claim_ids = {c.get("id") for c in _objects(claims)}
+
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict):
+            continue
+        if claim.get("construct") not in construct_ids:
+            findings.append(Finding(
+                "error", "claims[%d].construct" % index,
+                "claim %r references unknown construct %r"
+                % (claim.get("id"), claim.get("construct")),
+                gate=4,
+            ))
+
+    for block in ("evidence_model", "task_model"):
+        for index, entry in enumerate(card.get(block) or []):
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("claim") not in claim_ids:
+                findings.append(Finding(
+                    "error", "%s[%d].claim" % (block, index),
+                    "%s entry %r references unknown claim %r"
+                    % (block, entry.get("id"), entry.get("claim")),
+                    gate=4,
+                ))
+
+    evidenced = {e.get("claim") for e in _objects(card.get("evidence_model"))}
+    tasked = {t.get("claim") for t in _objects(card.get("task_model"))}
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict):
+            continue
+        identifier = claim.get("id")
+        if identifier not in evidenced:
+            findings.append(Finding(
+                "error", "claims[%d]" % index,
+                "claim %r has no evidence model entry, so nothing says what "
+                "would be observed to support it" % identifier,
+                gate=4,
+            ))
+        if identifier not in tasked:
+            findings.append(Finding(
+                "error", "claims[%d]" % index,
+                "claim %r has no task model entry, so nothing elicits it"
+                % identifier,
+                gate=4,
+            ))
+
+    source = _mapping(card.get("items")).get("source")
+    if not source:
+        findings.append(Finding(
+            "error", "items.source", "no item pool is named", gate=4))
+        return findings
+
+    rows, read_findings = _read_pool(resolve(card_path, source))
+    findings.extend(read_findings)
+    if rows is None:
+        return findings
+
+    counts = {}
+    for index, row in enumerate(rows):
+        claim_id = row.get("claim_id") if isinstance(row, dict) else None
+        if claim_id is None:
+            findings.append(Finding(
+                "error", "items.source",
+                "item %r has no claim_id, so it traces to nothing"
+                % (row.get("item_id") if isinstance(row, dict) else index),
+                gate=4,
+            ))
+            continue
+        if claim_id not in claim_ids:
+            findings.append(Finding(
+                "error", "items.source",
+                "item %r references unknown claim %r"
+                % (row.get("item_id"), claim_id),
+                gate=4,
+            ))
+            continue
+        counts[claim_id] = counts.get(claim_id, 0) + 1
+
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict):
+            continue
+        identifier = claim.get("id")
+        count = counts.get(identifier, 0)
+        if count < MINIMUM_ITEMS_PER_CLAIM:
+            findings.append(Finding(
+                "error", "claims[%d]" % index,
+                "claim %r has %d items; %d are needed before a score can be "
+                "read at the claim level"
+                % (identifier, count, MINIMUM_ITEMS_PER_CLAIM),
+                gate=4,
+            ))
+
+    return findings
+
+
+# (gate number, callable, needs_card_path). Gates 5 and 9 join in later tasks.
 ALL = [
     (1, gate_1_decision, False),
     (2, gate_2_harm_pathways, False),
     (3, gate_3_falsifiable, False),
+    (4, gate_4_trace_matrix, True),
 ]
