@@ -112,5 +112,34 @@ class TestWeightedKappa(unittest.TestCase):
             agreement.weighted_kappa([1, 1], [1, 1])
 
 
+class TestFleissKappa(unittest.TestCase):
+    def test_known_answer(self):
+        """3 raters, 4 items, 2 categories.
+
+        P_i = (sum(n_ij^2) - n) / (n(n-1)), n = 3:
+          [3,0] -> (9 - 3)/6 = 1
+          [2,1] -> (5 - 3)/6 = 1/3
+          [0,3] -> (9 - 3)/6 = 1
+          [1,2] -> (5 - 3)/6 = 1/3
+        P_bar = (1 + 1/3 + 1 + 1/3)/4 = 2/3
+        p_j = (6/12, 6/12) = (0.5, 0.5); P_e = 0.25 + 0.25 = 0.5
+        kappa = (2/3 - 1/2) / (1 - 1/2) = (1/6)/(1/2) = 1/3
+        """
+        counts = [[3, 0], [2, 1], [0, 3], [1, 2]]
+        self.assertAlmostEqual(agreement.fleiss_kappa(counts), 1 / 3, places=10)
+
+    def test_perfect_agreement_is_one(self):
+        counts = [[3, 0], [0, 3], [3, 0]]
+        self.assertAlmostEqual(agreement.fleiss_kappa(counts), 1.0, places=10)
+
+    def test_ragged_rows_raise(self):
+        with self.assertRaises(ValueError):
+            agreement.fleiss_kappa([[3, 0], [2, 0]])
+
+    def test_single_rater_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.fleiss_kappa([[1, 0], [0, 1]])
+
+
 if __name__ == "__main__":
     unittest.main()

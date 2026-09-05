@@ -95,3 +95,48 @@ def weighted_kappa(a, b, weights="linear"):
     if p_e == 1.0:
         raise ValueError("expected agreement is 1.0; weighted kappa is undefined")
     return (p_o - p_e) / (1.0 - p_e)
+
+
+def fleiss_kappa(counts):
+    """Fleiss' kappa for a fixed number of raters per item.
+
+    `counts` is one row per item giving how many raters chose each category, so
+    `[[3, 0], [2, 1]]` means three raters picked category 0 for item 1, and two
+    picked category 0 with one picking category 1 for item 2.
+
+    Unlike Cohen's kappa this does not require the same raters on every item,
+    only the same *number* of raters. Use krippendorff_alpha when even that does
+    not hold.
+
+    Raises ValueError on ragged rows, fewer than two raters, no items, or when
+    expected agreement is exactly 1.0.
+    """
+    if not counts:
+        raise ValueError("no items supplied")
+    n_raters = sum(counts[0])
+    if n_raters < 2:
+        raise ValueError("Fleiss' kappa needs at least two raters per item")
+    if any(sum(row) != n_raters for row in counts):
+        raise ValueError(
+            "every item must have the same number of ratings; use "
+            "krippendorff_alpha for ragged or missing data"
+        )
+
+    n_items = len(counts)
+    n_categories = len(counts[0])
+
+    agreements = [
+        (sum(c * c for c in row) - n_raters) / (n_raters * (n_raters - 1))
+        for row in counts
+    ]
+    p_bar = sum(agreements) / n_items
+
+    proportions = [
+        sum(row[j] for row in counts) / (n_items * n_raters)
+        for j in range(n_categories)
+    ]
+    p_e = sum(p * p for p in proportions)
+
+    if p_e == 1.0:
+        raise ValueError("expected agreement is 1.0; kappa is undefined")
+    return (p_bar - p_e) / (1.0 - p_e)
