@@ -1,7 +1,7 @@
 {
   "name": "genai-eval",
   "version": "0.1.0",
-  "description": "Design and qualify GenAI evaluations as measurement instruments. Ships eval-design (construct, claims, item pool, grader calibration) and eval-qualify (judge-human agreement with confidence intervals, item analysis, power, validity argument), coupled by a machine-readable eval card and a stdlib-only statistics toolkit.",
+  "description": "Qualify a GenAI evaluation as a measurement instrument. Ships eval-qualify: judge-human agreement with bootstrap confidence intervals read against the human-human ceiling, judge bias probes for length, position, self-preference and prompt sensitivity, a power check against a stated minimum detectable effect, and an observed disagreement taxonomy — all on a stdlib-only statistics toolkit. Runs standalone on a CSV of judge scores and human labels. eval-design and the machine-readable eval card are planned, not yet built.",
   "author": {
     "name": "Elroy Galbraith"
   },
