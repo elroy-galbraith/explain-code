@@ -182,9 +182,9 @@ That path covers SOP steps 3, 6, 7 and 10 in one run.
 
 ## 4. Components
 
-### 4.1 `scripts/evalstats.py`
+### 4.1 `scripts/evalstats/`
 
-Standard library only.
+Split into five modules by responsibility — `agreement.py`, `bias.py`, `items.py`, `power.py`, `saturation.py` — because one file covering all of them would run past 800 lines. Standard library only.
 
 **Agreement.** Cohen kappa; linear and quadratic weighted kappa (rubrics are
 usually ordinal, and unweighted kappa penalises a 4-vs-5 disagreement as
@@ -319,7 +319,7 @@ genai-eval/
 ├── .claude-plugin/plugin.json
 ├── README.md
 ├── scripts/
-│   ├── evalstats.py
+│   ├── evalstats/                  # package: agreement, bias, items, power, saturation
 │   ├── check_eval_card.py
 │   ├── render_eval_card.py
 │   └── test_*.py
