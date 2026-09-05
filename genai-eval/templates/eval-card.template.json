@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "FILL IN: short stable id for this eval, e.g. rag-grounding",
+  "title": "FILL IN: human-readable title for this eval",
+  "tier": 1,
+  "status": "draft",
+  "created": "FILL IN: ISO 8601 date, e.g. 2026-09-06",
+  "decision": {
+    "question": "FILL IN: the decision this eval exists to inform",
+    "owner": "FILL IN: named person or role accountable for acting on the result",
+    "outcomes": []
+  },
+  "domain": {
+    "users": "FILL IN: who is exposed to the system being evaluated",
+    "operating_conditions": "FILL IN: the conditions the system runs under in practice",
+    "harm_pathways": []
+  },
+  "constructs": [],
+  "claims": [],
+  "evidence_model": [],
+  "task_model": [],
+  "items": {
+    "source": "FILL IN path to the item pool JSONL, relative to this card (e.g. items/pool.jsonl)",
+    "sampling_frame": "FILL IN: where and how the pool was sampled",
+    "contamination_controls": {
+      "canary": "FILL IN: a canary string unique to this eval, used to detect leakage",
+      "date_stamped": false,
+      "novel_items": 0
+    },
+    "splits": {
+      "dev": {
+        "path": "FILL IN path to the dev split JSONL, relative to this card (e.g. items/dev.jsonl)"
+      },
+      "test": {
+        "path": "FILL IN path to the sealed test split JSONL, relative to this card (e.g. items/test.jsonl)",
+        "sealed": false,
+        "sha256": "FILL IN: sha256 of the sealed test split file, computed after sealing",
+        "sealed_at": "FILL IN: ISO 8601 timestamp of when the split was sealed"
+      }
+    }
+  },
+  "grader": {
+    "kind": "FILL IN: kind of grader, e.g. llm_judge or rule_based",
+    "model": "FILL IN: model/version doing the grading",
+    "mode": "FILL IN: grading mode, e.g. pairwise or pointwise",
+    "rubric_ref": "FILL IN path to the grading rubric, relative to this card (e.g. rubrics/grounding.md)",
+    "gold_set": "FILL IN path to the held-out human-labeled gold set, relative to this card (e.g. labels/gold.csv)",
+    "bias_probes": []
+  },
+  "preregistration": {
+    "sealed_at": "FILL IN: ISO 8601 timestamp of when the threshold was fixed",
+    "content_hash": "FILL IN: sha256 of the sealed protocol content",
+    "protocol": {
+      "prompts_ref": "FILL IN path to the exact prompts used, relative to this card (e.g. prompts/v1.md)",
+      "seeds": [],
+      "temperature": 0.0,
+      "elicitation_budget": "FILL IN: e.g. 3 attempts, best-of-n off"
+    },
+    "baselines": [],
+    "threshold": {
+      "metric": "FILL IN: the metric the decision rule is applied to",
+      "minimum_interesting_difference": 0.0,
+      "decision_rule": "FILL IN: e.g. lower bound of 95% CI > 0.90"
+    }
+  }
+}
