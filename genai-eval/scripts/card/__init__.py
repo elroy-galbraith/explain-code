@@ -9,6 +9,6 @@ than asked of a model.
     gates.py    one function per mechanical gate
 """
 
-from . import loader
+from . import gates, loader
 
-__all__ = ["loader"]
+__all__ = ["gates", "loader"]
