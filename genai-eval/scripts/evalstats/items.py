@@ -101,3 +101,41 @@ def flag_items(matrix):
             }
         )
     return report
+
+
+def kr20(matrix):
+    """Kuder-Richardson 20 — internal-consistency reliability for binary items.
+
+    Answers "if I built a second eval from the same item pool, how much would
+    the scores agree?". Low reliability caps every comparison you can make: an
+    instrument that disagrees with itself cannot detect a difference between two
+    models.
+
+    Uses the *population* variance of total scores (divisor N), which is the
+    classical KR-20 form. Sample variance produces a slightly higher number, and
+    mixing the two silently across a codebase is a real source of irreproducible
+    reliability figures.
+
+    Returns None when total-score variance is zero, since reliability is
+    undefined rather than zero when nobody differs.
+    """
+    if not matrix:
+        raise ValueError("no respondents supplied")
+    n_items = len(matrix[0])
+    if n_items < 2:
+        raise ValueError("KR-20 needs at least two items")
+    if any(len(row) != n_items for row in matrix):
+        raise ValueError("every respondent must answer the same number of items")
+
+    totals = [sum(row) for row in matrix]
+    total_variance = statistics.pvariance(totals)
+    if total_variance == 0:
+        return None
+
+    item_variance_sum = 0.0
+    for j in range(n_items):
+        column = [row[j] for row in matrix]
+        p = sum(column) / len(column)
+        item_variance_sum += p * (1.0 - p)
+
+    return (n_items / (n_items - 1)) * (1.0 - item_variance_sum / total_variance)

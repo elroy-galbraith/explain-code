@@ -108,5 +108,28 @@ class TestFlagItems(unittest.TestCase):
             items.flag_items([[1, 0], [1]])
 
 
+class TestKR20(unittest.TestCase):
+    def test_known_answer(self):
+        """4 items, 5 examinees, Guttman matrix.
+
+        Item p values: 0.8, 0.6, 0.4, 0.2
+        sum of p*q = 0.16 + 0.24 + 0.24 + 0.16 = 0.80
+        totals [4,3,2,1,0], mean 2, population variance 10/5 = 2.0
+        KR-20 = (4/3) * (1 - 0.80/2.0) = (4/3) * 0.6 = 0.8
+        """
+        self.assertAlmostEqual(items.kr20(GUTTMAN), 0.8, places=10)
+
+    def test_zero_variance_returns_none(self):
+        self.assertIsNone(items.kr20([[1, 1], [1, 1], [1, 1]]))
+
+    def test_single_item_raises(self):
+        with self.assertRaises(ValueError):
+            items.kr20([[1], [0], [1]])
+
+    def test_ragged_matrix_raises(self):
+        with self.assertRaises(ValueError):
+            items.kr20([[1, 0], [1]])
+
+
 if __name__ == "__main__":
     unittest.main()
