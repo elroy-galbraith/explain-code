@@ -6,6 +6,7 @@ small to support them, and the comparison then reports noise with a confident
 face. These functions turn "is this enough items?" into a number.
 """
 
+import math
 from statistics import NormalDist
 
 _NORMAL = NormalDist()
@@ -70,3 +71,38 @@ def mde_two_proportion(n, baseline, alpha=0.05, power=0.80, direction="up",
         else:
             far = middle  # detectable, try closer to the baseline
     return far
+
+
+def discordant_counts(a_results, b_results):
+    """Discordant pair counts for two systems run on the same items.
+
+    Returns (b, c): b is the number of items the first system passed and the
+    second failed, c the reverse. Items where both agree carry no information
+    about which system is better and are discarded.
+    """
+    if len(a_results) != len(b_results):
+        raise ValueError("result sequences must be the same length")
+    b = sum(1 for x, y in zip(a_results, b_results) if x and not y)
+    c = sum(1 for x, y in zip(a_results, b_results) if y and not x)
+    return b, c
+
+
+def mcnemar_exact(b, c):
+    """Two-sided exact McNemar test on discordant counts.
+
+    Under the null, each discordant item is a fair coin flip, so the p-value is
+    an exact binomial tail rather than a chi-square approximation. Use the exact
+    form always: the approximation is unreliable at exactly the small discordant
+    counts eval comparisons usually produce.
+
+    Returns 1.0 when there are no discordant pairs — two systems that never
+    differ provide no evidence that they differ.
+    """
+    if b < 0 or c < 0:
+        raise ValueError("discordant counts cannot be negative")
+    n = b + c
+    if n == 0:
+        return 1.0
+    smaller = min(b, c)
+    tail = sum(math.comb(n, i) for i in range(smaller + 1)) / (2 ** n)
+    return min(1.0, 2.0 * tail)
