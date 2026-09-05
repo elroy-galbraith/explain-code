@@ -456,6 +456,121 @@ class TestGate5SealedSplit(unittest.TestCase):
         self.assertIn("sha256", findings[0].path)
 
 
+class TestGate9Preregistration(unittest.TestCase):
+    def test_a_valid_card_passes(self):
+        self.assertEqual(run_gate(gates.gate_9_preregistration), [])
+
+    def test_a_missing_content_hash_fires(self):
+        findings = run_gate(
+            gates.gate_9_preregistration,
+            lambda c: c["preregistration"].pop("content_hash"))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].gate, 9)
+        self.assertEqual(findings[0].path, "preregistration.content_hash")
+
+    def test_a_missing_sealed_at_fires(self):
+        findings = run_gate(
+            gates.gate_9_preregistration,
+            lambda c: c["preregistration"].pop("sealed_at"))
+        self.assertEqual(len(findings), 1)
+
+    def test_an_unparseable_timestamp_fires(self):
+        findings = run_gate(
+            gates.gate_9_preregistration,
+            lambda c: c["preregistration"].update(sealed_at="last Tuesday"))
+        self.assertEqual(len(findings), 1)
+        self.assertIn("sealed_at", findings[0].path)
+
+    def test_a_missing_threshold_fires(self):
+        """A preregistration with no decision rule preregisters nothing."""
+        findings = run_gate(
+            gates.gate_9_preregistration,
+            lambda c: c["preregistration"].pop("threshold"))
+        self.assertEqual(len(findings), 1)
+
+    def test_an_empty_threshold_fires(self):
+        """Gate 9 asks only that a threshold was fixed before the run. Whether
+        the decision rule inside it is coherent is Gate 10's question, and the
+        schema tags `decision_rule` to Gate 10 — so `{}` is the failure this
+        gate names, not a missing decision_rule."""
+        findings = run_gate(
+            gates.gate_9_preregistration,
+            lambda c: c["preregistration"].update(threshold={}))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "preregistration.threshold")
+
+    def test_a_naive_result_timestamp_is_compared_not_crashed_on(self):
+        """The seal carries a Z and this result does not. Python refuses to
+        compare an aware datetime with a naive one, so the unguarded version of
+        this gate raises TypeError on a perfectly ordinary card."""
+        def mutate(card):
+            card["qualification"] = {
+                "results": {"computed_at": "2026-09-05T09:00:00"}}
+
+        findings = run_gate(gates.gate_9_preregistration, mutate)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("predates", findings[0].message)
+
+    def test_a_wrong_shaped_preregistration_block_does_not_raise(self):
+        """The loader reports the shape; this gate has to survive it anyway."""
+        findings = run_gate(
+            gates.gate_9_preregistration, lambda c: c.update(preregistration="sealed"))
+        self.assertEqual([f.path for f in findings], [
+            "preregistration.content_hash",
+            "preregistration.sealed_at",
+            "preregistration.threshold",
+        ])
+
+    def test_a_result_timestamped_before_the_seal_fires(self):
+        """The goalposts moved. A result that predates the threshold it is
+        judged against means the threshold was chosen knowing the answer."""
+        def mutate(card):
+            card["qualification"] = {
+                "results": {"computed_at": "2026-09-05T09:00:00Z"}}
+
+        findings = run_gate(gates.gate_9_preregistration, mutate)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("predates", findings[0].message)
+
+    def test_a_result_after_the_seal_passes(self):
+        def mutate(card):
+            card["qualification"] = {
+                "results": {"computed_at": "2026-09-07T09:00:00Z"}}
+
+        self.assertEqual(run_gate(gates.gate_9_preregistration, mutate), [])
+
+
+class TestRunAll(unittest.TestCase):
+    def test_a_valid_card_produces_no_findings_from_any_gate(self):
+        path = write_card(tempfile.mkdtemp())
+        card, structural = loader.load_card(path)
+        self.assertEqual(structural, [])
+        self.assertEqual(gates.run_all(card, path), [])
+
+    def test_findings_come_back_in_gate_order(self):
+        def mutate(card):
+            card["preregistration"].pop("content_hash")   # gate 9
+            card["decision"].pop("owner")                 # gate 1
+            card["constructs"][0]["negative_evidence"] = []  # gate 3
+
+        path = write_card(tempfile.mkdtemp(), mutate=mutate)
+        card, _ = loader.load_card(path)
+        found = gates.run_all(card, path)
+        self.assertEqual([f.gate for f in found], [1, 3, 9])
+
+    def test_every_registered_gate_runs_even_when_an_earlier_one_fails(self):
+        """A linter fixes a card in one pass. Stopping at the first failed gate
+        would make someone run it once per problem."""
+        def mutate(card):
+            card["decision"].pop("owner")
+            card["items"]["splits"]["test"]["sealed"] = False
+
+        path = write_card(tempfile.mkdtemp(), mutate=mutate)
+        card, _ = loader.load_card(path)
+        found = gates.run_all(card, path)
+        self.assertEqual(sorted({f.gate for f in found}), [1, 5])
+
+
 class TestGatesDoNotBleed(unittest.TestCase):
     def test_breaking_gate_1_leaves_gate_3_silent(self):
         """Each gate answers its own question. A card broken in one place

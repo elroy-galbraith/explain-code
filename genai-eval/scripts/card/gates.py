@@ -8,6 +8,7 @@ Gates 6, 7, 8, 10 and 11 need a qualification block that nothing writes yet;
 they arrive with card mode. The registry at the bottom is the seam.
 """
 
+import datetime
 import hashlib
 import json
 
@@ -396,11 +397,111 @@ def gate_5_sealed_split(card, card_path):
     return findings
 
 
-# (gate number, callable, needs_card_path). Gate 9 joins in a later task.
+def _parse_timestamp(value):
+    """Parse an ISO 8601 timestamp, tolerating a trailing Z. None if invalid."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        # A card that writes "2026-09-06T10:00:00Z" for the seal and a bare
+        # "2026-09-06T11:00:00" for a result is ordinary. Comparing an aware
+        # datetime with a naive one raises TypeError, and a gate that raises
+        # takes the whole run down — so read a missing offset as UTC.
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed
+
+
+def _result_timestamps(card):
+    """Every timestamp under `qualification` that looks like a result time."""
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("computed_at", "run_at", "measured_at"):
+                    parsed = _parse_timestamp(value)
+                    if parsed is not None:
+                        found.append((path + "." + key, parsed))
+                else:
+                    walk(value, path + "." + key)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, "%s[%d]" % (path, index))
+
+    walk(card.get("qualification") or {}, "qualification")
+    return found
+
+
+def gate_9_preregistration(card):
+    """Gate 9: was the decision threshold set before the run?
+
+    This is the gate that stops the goalposts moving, and it is checkable only
+    because the card records a hash and a timestamp before any result exists.
+    Everyone believes they would not move a threshold after seeing the number.
+    """
+    findings = []
+    prereg = _mapping(card.get("preregistration"))
+
+    if _blank(prereg.get("content_hash")):
+        findings.append(Finding(
+            "error", "preregistration.content_hash",
+            "no content hash, so nothing shows the protocol is the one that "
+            "was sealed",
+            gate=9,
+        ))
+
+    sealed_at = _parse_timestamp(prereg.get("sealed_at"))
+    if sealed_at is None:
+        findings.append(Finding(
+            "error", "preregistration.sealed_at",
+            "no parseable ISO 8601 seal timestamp; without one, 'before the "
+            "run' cannot be established",
+            gate=9,
+        ))
+
+    threshold = prereg.get("threshold")
+    if not isinstance(threshold, dict) or not threshold:
+        findings.append(Finding(
+            "error", "preregistration.threshold",
+            "no threshold fixed before the run; a preregistration that commits "
+            "to no number preregisters nothing",
+            gate=9,
+        ))
+
+    if sealed_at is not None:
+        for path, stamp in _result_timestamps(card):
+            if stamp < sealed_at:
+                findings.append(Finding(
+                    "error", path,
+                    "result timestamp %s predates the preregistration seal at "
+                    "%s; the threshold was set knowing the answer"
+                    % (stamp.isoformat(), sealed_at.isoformat()),
+                    gate=9,
+                ))
+
+    return findings
+
+
+# (gate number, callable, needs_card_path).
 ALL = [
     (1, gate_1_decision, False),
     (2, gate_2_harm_pathways, False),
     (3, gate_3_falsifiable, False),
     (4, gate_4_trace_matrix, True),
     (5, gate_5_sealed_split, True),
+    (9, gate_9_preregistration, False),
 ]
+
+
+def run_all(card, card_path):
+    """Run every registered gate, in numeric order, and collect the findings."""
+    findings = []
+    for number, check, needs_path in sorted(ALL, key=lambda entry: entry[0]):
+        findings.extend(check(card, card_path) if needs_path else check(card))
+    return findings
