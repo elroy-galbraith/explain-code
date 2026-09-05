@@ -6,6 +6,8 @@ human 90% of the time on a task where 88% of items get the same label is not a
 good judge, and only a chance-corrected statistic shows that.
 """
 
+import random
+
 
 def cohens_kappa(a, b):
     """Cohen's kappa for two raters on nominal categories.
@@ -269,3 +271,47 @@ def krippendorff_alpha(units, level="nominal"):
     if expected == 0.0:
         return 1.0
     return 1.0 - observed / expected
+
+
+def bootstrap_ci(units, statistic, n_resamples=2000, confidence=0.95, seed=None):
+    """Percentile bootstrap confidence interval for a unit-level statistic.
+
+    `units` is the same per-item structure the agreement functions take, and
+    `statistic` is any callable mapping a list of units to a float.
+
+    Resampling is by *unit*, not by individual rating. Ratings cluster within an
+    item — two raters looking at the same hard item disagree together — so
+    resampling ratings independently breaks that dependence and produces
+    intervals that are far too narrow.
+
+    Resamples on which `statistic` raises ValueError are skipped, since a
+    resample can legitimately contain a single category. If more than half of
+    them fail, that is not a skippable edge case and this raises rather than
+    returning an interval computed from the survivors.
+    """
+    n = len(units)
+    if n < 2:
+        raise ValueError("bootstrap needs at least two units")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be strictly between 0 and 1")
+
+    rng = random.Random(seed)
+    estimates = []
+    for _ in range(n_resamples):
+        sample = [units[rng.randrange(n)] for _ in range(n)]
+        try:
+            estimates.append(statistic(sample))
+        except ValueError:
+            continue
+
+    if len(estimates) < n_resamples / 2:
+        raise ValueError(
+            "%d of %d resamples were degenerate; the sample is too small or too "
+            "homogeneous for a bootstrap interval" % (n_resamples - len(estimates), n_resamples)
+        )
+
+    estimates.sort()
+    tail = (1.0 - confidence) / 2.0
+    low_index = int(tail * len(estimates))
+    high_index = min(len(estimates) - 1, int((1.0 - tail) * len(estimates)))
+    return estimates[low_index], estimates[high_index]

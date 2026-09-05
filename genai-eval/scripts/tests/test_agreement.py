@@ -274,5 +274,83 @@ class TestKrippendorffLevels(unittest.TestCase):
             agreement.krippendorff_alpha([["a", "a"], ["a", "b"]], level="interval")
 
 
+import random
+
+
+class TestBootstrapCI(unittest.TestCase):
+    def _units(self, n_agree, n_disagree):
+        return [["a", "a"]] * n_agree + [["a", "b"]] * n_disagree
+
+    def test_is_deterministic_for_a_fixed_seed(self):
+        units = self._units(30, 10)
+        first = agreement.bootstrap_ci(
+            units, agreement.krippendorff_alpha, n_resamples=200, seed=7
+        )
+        second = agreement.bootstrap_ci(
+            units, agreement.krippendorff_alpha, n_resamples=200, seed=7
+        )
+        self.assertEqual(first, second)
+
+    def test_interval_brackets_the_point_estimate(self):
+        units = self._units(30, 10)
+        point = agreement.krippendorff_alpha(units)
+        low, high = agreement.bootstrap_ci(
+            units, agreement.krippendorff_alpha, n_resamples=500, seed=11
+        )
+        self.assertLessEqual(low, point)
+        self.assertLessEqual(point, high)
+
+    def test_more_units_give_a_narrower_interval(self):
+        """The whole point of reporting n alongside an interval."""
+        small = agreement.bootstrap_ci(
+            self._units(15, 5), agreement.krippendorff_alpha,
+            n_resamples=400, seed=3,
+        )
+        large = agreement.bootstrap_ci(
+            self._units(300, 100), agreement.krippendorff_alpha,
+            n_resamples=400, seed=3,
+        )
+        self.assertLess(large[1] - large[0], small[1] - small[0])
+
+    def test_too_few_units_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.bootstrap_ci([["a", "a"]], agreement.krippendorff_alpha)
+
+    def test_mostly_degenerate_resamples_raise(self):
+        """A statistic that almost always fails must not silently yield an
+        interval computed from the handful of resamples that happened to work."""
+
+        def almost_always_fails(units):
+            raise ValueError("degenerate")
+
+        with self.assertRaises(ValueError):
+            agreement.bootstrap_ci(
+                self._units(10, 10), almost_always_fails, n_resamples=50, seed=1
+            )
+
+    def test_nominal_coverage_is_close_to_the_stated_level(self):
+        """Simulation check: a nominal 95% interval should cover the truth about
+        95% of the time. Loose bounds, since this is 150 simulations."""
+        rng = random.Random(20260905)
+        truth_units = self._units(300, 100)
+        truth = agreement.krippendorff_alpha(truth_units)
+
+        covered = 0
+        trials = 150
+        for _ in range(trials):
+            sample = [truth_units[rng.randrange(len(truth_units))] for _ in range(60)]
+            try:
+                low, high = agreement.bootstrap_ci(
+                    sample, agreement.krippendorff_alpha,
+                    n_resamples=300, seed=rng.randrange(10 ** 6),
+                )
+            except ValueError:
+                continue
+            if low <= truth <= high:
+                covered += 1
+        self.assertGreater(covered / trials, 0.85)
+        self.assertLessEqual(covered / trials, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
