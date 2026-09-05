@@ -155,15 +155,15 @@ def load_labels(path, judge=None, humans=None, item_id=None, length=None,
 
     guessed = []
     if judge is None:
-        guessed.append("%s → judge score" % judge_column)
+        guessed.append("%s -> judge score" % judge_column)
     if humans is None:
-        guessed.append("%s → human rater" % ", ".join(human_names))
+        guessed.append("%s -> human rater" % ", ".join(human_names))
     if item_id is None and item_column is not None:
-        guessed.append("%s → item id" % item_column)
+        guessed.append("%s -> item id" % item_column)
     if length is None and length_column is not None:
-        guessed.append("%s → response length" % length_column)
+        guessed.append("%s -> response length" % length_column)
     if generator is None and generator_column is not None:
-        guessed.append("%s → generator" % generator_column)
+        guessed.append("%s -> generator" % generator_column)
 
     def column(name):
         return [row[name] for row in rows]
