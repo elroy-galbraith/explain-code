@@ -108,7 +108,9 @@ def main(argv=None):
                 seed=args.seed,
                 n_resamples=args.resamples,
             ),
-            analysis.bias_section(data, judge_model=args.judge_model),
+            analysis.bias_section(
+                data, judge_model=args.judge_model, categories=categories
+            ),
             analysis.disagreement_clusters(data),
             analysis.power_section(data, mid=args.mid),
             title=args.title,

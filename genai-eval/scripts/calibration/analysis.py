@@ -117,13 +117,56 @@ def agreement_section(data, level="nominal", categories=None, seed=None,
     }
 
 
-def bias_section(data, judge_model=None):
+def _all_numeric(values):
+    """True when every rating that is present is a real number.
+
+    Both probes need this for different reasons: the length probe ranks the
+    ratings, and `statistics.mean` inside the self-preference probe refuses
+    strings outright.
+    """
+    return all(
+        isinstance(v, (int, float)) and not isinstance(v, bool)
+        for v in values
+        if v is not None
+    )
+
+
+def _on_scale(values, index):
+    """Rewrite ratings as their position on the stated scale.
+
+    Returns None when a rating is absent from `index` — putting it somewhere on
+    the scale would mean inventing a place the caller never stated.
+    """
+    encoded = []
+    for value in values:
+        if value is None:
+            encoded.append(None)
+        elif value in index:
+            encoded.append(index[value])
+        else:
+            return None
+    return encoded
+
+
+def bias_section(data, judge_model=None, categories=None):
     """Whichever judge bias probes the available columns support.
 
     Each probe that cannot run is named in `unavailable` together with what it
     would need. A silently skipped probe reads as a probe that found nothing.
+
+    `categories` is the stated scale order, low to high, and matters here as
+    much as it does for alpha: the length probe ranks the ratings, and ranking
+    "low", "medium", "high" with no stated order sorts them alphabetically into
+    high < low < medium. That can flip the sign of the reported gap, so word
+    labels with no `categories` skip the probe rather than rank as text.
+
+    Rows where any of the three aligned columns is blank are dropped before the
+    correlation, and the surviving count travels with the result as `n`. The
+    rest of this pipeline already treats a blank cell as missing rather than as
+    a rating; sorting one would raise instead.
     """
     unavailable = []
+    index = {c: i for i, c in enumerate(categories)} if categories else None
 
     length = None
     if data.lengths is None:
@@ -133,9 +176,43 @@ def bias_section(data, judge_model=None):
         )
     else:
         human_name = next(iter(data.human_columns))
-        length = bias.length_bias(
-            data.judge_scores, data.human_columns[human_name], data.lengths
-        )
+        judge = data.judge_scores
+        human = data.human_columns[human_name]
+        if index is not None:
+            judge, human = _on_scale(judge, index), _on_scale(human, index)
+
+        if judge is None or human is None:
+            unavailable.append(
+                "Length bias: a rating is missing from the stated scale order, "
+                "so its rank on that scale is unknown. Name every rating value "
+                "in --categories."
+            )
+        elif not (_all_numeric(judge) and _all_numeric(human)):
+            unavailable.append(
+                "Length bias: needs numeric ratings, or --categories stating "
+                "the scale order low to high. Ranking word labels without a "
+                "stated order sorts them alphabetically, which can report the "
+                "judge penalising length when it rewards it."
+            )
+        else:
+            rows = [
+                (j, h, size)
+                for j, h, size in zip(judge, human, data.lengths)
+                if j is not None and h is not None and size is not None
+            ]
+            if len(rows) < 2:
+                unavailable.append(
+                    "Length bias: %d row(s) have a judge score, a human label "
+                    "and a length together; the correlation needs at least two."
+                    % len(rows)
+                )
+            else:
+                length = bias.length_bias(
+                    [r[0] for r in rows],
+                    [r[1] for r in rows],
+                    [r[2] for r in rows],
+                )
+                length["n"] = len(rows)
 
     preference = None
     if data.generators is None:
@@ -148,10 +225,25 @@ def bias_section(data, judge_model=None):
             "Self-preference: needs the judge model's name, to know which "
             "generator counts as its own. Pass --judge-model."
         )
-    else:
-        preference = bias.self_preference(
-            data.judge_scores, data.generators, judge_model
+    elif not _all_numeric(data.judge_scores):
+        unavailable.append(
+            "Self-preference: comparing means needs numeric scores, and this "
+            "judge column holds labels. Rescore on a numeric scale to run it."
         )
+    else:
+        scored = [
+            (s, g)
+            for s, g in zip(data.judge_scores, data.generators)
+            if s is not None
+        ]
+        if not scored:
+            unavailable.append(
+                "Self-preference: no row carries a judge score."
+            )
+        else:
+            preference = bias.self_preference(
+                [s for s, _ in scored], [g for _, g in scored], judge_model
+            )
 
     return {
         "length": length,

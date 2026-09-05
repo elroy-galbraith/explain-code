@@ -203,6 +203,154 @@ class TestBiasSection(unittest.TestCase):
         self.assertIsNone(result["length"]["gap"])
 
 
+class TestBiasSectionScaleOrder(unittest.TestCase):
+    """The length probe ranks the ratings, so it needs the scale's order.
+
+    Sorting word labels alphabetically puts high < low < medium, which is not
+    the rubric's order and can flip the sign of the gap the probe reports.
+    """
+
+    WORDS = ["low", "medium", "high", "low", "medium", "high"]
+    HUMAN_WORDS = ["low", "low", "high", "medium", "medium", "high"]
+    NUMBERS = [1, 2, 3, 1, 2, 3]
+    HUMAN_NUMBERS = [1, 1, 3, 2, 2, 3]
+    LENGTHS = [100, 300, 500, 200, 250, 520]
+    ORDER = ["low", "medium", "high"]
+
+    def test_word_labels_with_categories_match_the_numeric_encoding(self):
+        """Same data, two encodings. Stating the order has to reproduce the
+        numeric answer exactly, or one of the two reports is wrong."""
+        words = analysis.bias_section(
+            make_data(
+                self.WORDS, {"human": self.HUMAN_WORDS}, lengths=self.LENGTHS
+            ),
+            categories=self.ORDER,
+        )
+        numbers = analysis.bias_section(
+            make_data(
+                self.NUMBERS, {"human": self.HUMAN_NUMBERS}, lengths=self.LENGTHS
+            )
+        )
+        self.assertAlmostEqual(
+            words["length"]["gap"], numbers["length"]["gap"], places=12
+        )
+        self.assertAlmostEqual(
+            words["length"]["judge_rho"], numbers["length"]["judge_rho"], places=12
+        )
+
+    def test_word_labels_without_categories_are_not_ranked_as_text(self):
+        """No number at all is the honest output here: an alphabetical rank
+        would produce a confident figure with the wrong sign."""
+        result = analysis.bias_section(
+            make_data(
+                self.WORDS, {"human": self.HUMAN_WORDS}, lengths=self.LENGTHS
+            )
+        )
+        self.assertIsNone(result["length"])
+        self.assertTrue(
+            any(
+                "--categories" in u and u.startswith("Length bias")
+                for u in result["unavailable"]
+            ),
+            result["unavailable"],
+        )
+
+    def test_a_rating_outside_the_stated_scale_is_named_not_ranked(self):
+        result = analysis.bias_section(
+            make_data(
+                ["low", "medium", "surprise"],
+                {"human": ["low", "medium", "high"]},
+                lengths=[100, 200, 300],
+            ),
+            categories=self.ORDER,
+        )
+        self.assertIsNone(result["length"])
+        self.assertTrue(
+            any(u.startswith("Length bias") for u in result["unavailable"]),
+            result["unavailable"],
+        )
+
+
+class TestBiasSectionMissingCells(unittest.TestCase):
+    """A blank cell is missing data, not a rating.
+
+    The loader deliberately produces None for one, and the rest of the
+    pipeline skips those rows. The length probe used to hand them straight to
+    a sort, which raises and takes the whole report with it.
+    """
+
+    def test_a_blank_judge_cell_is_dropped_not_sorted(self):
+        result = analysis.bias_section(
+            make_data(
+                [1, None, 3, 1, 2, 3],
+                {"human": [1, 1, 3, 2, 2, 3]},
+                lengths=[100, 300, 500, 200, 250, 520],
+            )
+        )
+        self.assertIsNotNone(result["length"])
+        self.assertEqual(result["length"]["n"], 5)
+
+    def test_a_blank_human_cell_is_dropped_not_sorted(self):
+        result = analysis.bias_section(
+            make_data(
+                [1, 2, 3, 1, 2, 3],
+                {"human": [1, None, 3, 2, 2, 3]},
+                lengths=[100, 300, 500, 200, 250, 520],
+            )
+        )
+        self.assertIsNotNone(result["length"])
+        self.assertEqual(result["length"]["n"], 5)
+
+    def test_a_wholly_blank_length_column_is_named_not_computed(self):
+        """An empty column coerces to numeric vacuously, so nothing upstream
+        catches it. Two rows are the minimum a correlation can use."""
+        result = analysis.bias_section(
+            make_data(
+                [1, 2, 3],
+                {"human": [1, 2, 3]},
+                lengths=[None, None, None],
+            )
+        )
+        self.assertIsNone(result["length"])
+        self.assertTrue(
+            any(u.startswith("Length bias") for u in result["unavailable"]),
+            result["unavailable"],
+        )
+
+    def test_blank_judge_scores_are_dropped_before_the_means(self):
+        result = analysis.bias_section(
+            make_data(
+                [5, None, 3, 3],
+                {"human": [4, 4, 4, 4]},
+                generators=["gpt-x", "gpt-x", "other", "other"],
+            ),
+            judge_model="gpt-x",
+        )
+        self.assertEqual(result["self_preference"]["n_own"], 1)
+        self.assertAlmostEqual(result["self_preference"]["delta"], 2.0, places=10)
+
+    def test_word_labels_leave_self_preference_named_not_crashed(self):
+        """statistics.mean refuses strings. Both flags are documented and
+        independently sensible, so the run must survive using both."""
+        result = analysis.bias_section(
+            make_data(
+                ["low", "high", "medium"],
+                {"human": ["low", "high", "high"]},
+                generators=["gpt-x", "gpt-x", "other"],
+            ),
+            judge_model="gpt-x",
+            categories=["low", "medium", "high"],
+        )
+        self.assertIsNone(result["self_preference"])
+        self.assertTrue(
+            any(
+                u.startswith("Self-preference") and "numeric" in u
+                for u in result["unavailable"]
+            ),
+            result["unavailable"],
+        )
+
+
 class TestDisagreementClusters(unittest.TestCase):
     def test_known_counts_and_ordering(self):
         """Six items. The judge says 5 where the human said 3 three times, and
