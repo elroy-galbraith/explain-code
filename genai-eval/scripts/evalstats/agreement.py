@@ -184,7 +184,52 @@ def _nominal_metric(values, marginals):
     return delta
 
 
-_METRICS = {"nominal": _nominal_metric}
+def _interval_metric(values, marginals):
+    """Squared numeric distance. Requires values to be numbers."""
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise TypeError(
+                "the interval metric needs numeric ratings; got %r" % (v,)
+            )
+
+    def delta(i, j):
+        d = values[i] - values[j]
+        return float(d * d)
+
+    return delta
+
+
+def _ordinal_metric(values, marginals):
+    """Krippendorff's ordinal metric.
+
+    The distance between two ranks depends on how many observations sit between
+    them: the squared sum of the marginals spanning the interval, less half of
+    each endpoint. Two adjacent categories are far apart if the scale is
+    crowded there and close together if it is sparse, which is the behaviour an
+    ordinal rubric actually has.
+    """
+    cumulative = []
+    running = 0.0
+    for m in marginals:
+        running += m
+        cumulative.append(running)
+
+    def delta(i, j):
+        if i == j:
+            return 0.0
+        lo, hi = (i, j) if i < j else (j, i)
+        span = cumulative[hi] - (cumulative[lo] - marginals[lo])
+        adjusted = span - (marginals[lo] + marginals[hi]) / 2.0
+        return adjusted * adjusted
+
+    return delta
+
+
+_METRICS = {
+    "nominal": _nominal_metric,
+    "ordinal": _ordinal_metric,
+    "interval": _interval_metric,
+}
 
 
 def krippendorff_alpha(units, level="nominal"):
@@ -194,8 +239,8 @@ def krippendorff_alpha(units, level="nominal"):
     rating that is absent. Units with fewer than two present ratings are dropped
     because they carry no pairable information.
 
-    `level` selects the difference function: "nominal" for unordered categories.
-    Later tasks add "ordinal" and "interval".
+    `level` selects the difference function: "nominal" for unordered categories,
+    "ordinal" for ranked categories, "interval" for numeric ratings.
 
     Returns 1.0 when expected disagreement is zero, which happens when every
     rating in the data is identical — agreement is perfect and the chance

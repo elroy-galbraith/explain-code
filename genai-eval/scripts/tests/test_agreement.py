@@ -209,5 +209,70 @@ class TestKrippendorffNominal(unittest.TestCase):
             agreement.krippendorff_alpha([["a", "a"], ["a", "b"]], level="ratio")
 
 
+class TestKrippendorffLevels(unittest.TestCase):
+    """One fixture, three known answers.
+
+    units = [[1,1], [2,2], [1,2], [3,3]]
+    Coincidence: o_11 = 2, o_22 = 2, o_12 = 1, o_21 = 1, o_33 = 2
+    total n = 8, marginals n_1 = 3, n_2 = 3, n_3 = 2
+    """
+
+    UNITS = [[1, 1], [2, 2], [1, 2], [3, 3]]
+
+    def test_nominal(self):
+        """delta = 1 for every unequal pair.
+        D_o = 2/8 = 0.25
+        D_e = (9 + 9 + 6 + 6 + 6 + 6)/(8*7) = 42/56 = 0.75
+        alpha = 1 - 0.25/0.75 = 2/3
+        """
+        got = agreement.krippendorff_alpha(self.UNITS, level="nominal")
+        self.assertAlmostEqual(got, 2 / 3, places=10)
+
+    def test_interval(self):
+        """delta(c,k) = (v_c - v_k)^2, so delta(1,2)=1, delta(1,3)=4, delta(2,3)=1.
+        D_o = (1*1 + 1*1)/8 = 0.25
+        D_e = [3*3*1*2 + 3*2*4*2 + 3*2*1*2]/(8*7) = (18 + 48 + 12)/56 = 78/56
+        alpha = 1 - 0.25*56/78 = 1 - 7/39 = 32/39
+        """
+        got = agreement.krippendorff_alpha(self.UNITS, level="interval")
+        self.assertAlmostEqual(got, 32 / 39, places=10)
+
+    def test_ordinal(self):
+        """delta(c,k) = (sum of marginals from c to k, minus half the endpoints)^2.
+        delta(1,2) = (3 + 3 - 3)^2 = 9
+        delta(1,3) = (3 + 3 + 2 - 2.5)^2 = 5.5^2 = 30.25
+        delta(2,3) = (3 + 2 - 2.5)^2 = 2.5^2 = 6.25
+        D_o = (9 + 9)/8 = 2.25
+        D_e = [3*3*9*2 + 3*2*30.25*2 + 3*2*6.25*2]/56 = (162 + 363 + 75)/56 = 600/56
+        alpha = 1 - 2.25*56/600 = 1 - 0.21 = 0.79
+        """
+        got = agreement.krippendorff_alpha(self.UNITS, level="ordinal")
+        self.assertAlmostEqual(got, 0.79, places=10)
+
+    def test_interval_punishes_distant_disagreement_more(self):
+        """A one-step disagreement should score higher than a three-step one."""
+        near = [[1, 1], [2, 2], [1, 2], [4, 4]]
+        far = [[1, 1], [2, 2], [1, 4], [4, 4]]
+        self.assertGreater(
+            agreement.krippendorff_alpha(near, level="interval"),
+            agreement.krippendorff_alpha(far, level="interval"),
+        )
+
+    def test_nominal_ignores_distance(self):
+        """The same two datasets are indistinguishable to the nominal metric,
+        which is exactly why an ordinal rubric must not use it."""
+        near = [[1, 1], [2, 2], [1, 2], [4, 4]]
+        far = [[1, 1], [2, 2], [1, 4], [4, 4]]
+        self.assertAlmostEqual(
+            agreement.krippendorff_alpha(near, level="nominal"),
+            agreement.krippendorff_alpha(far, level="nominal"),
+            places=10,
+        )
+
+    def test_interval_on_non_numeric_raises(self):
+        with self.assertRaises(TypeError):
+            agreement.krippendorff_alpha([["a", "a"], ["a", "b"]], level="interval")
+
+
 if __name__ == "__main__":
     unittest.main()
