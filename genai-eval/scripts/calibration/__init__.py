@@ -8,6 +8,6 @@ package is where reading, deciding what to run, and formatting live:
     report.py    results become markdown a person reads
 """
 
-from . import loader
+from . import analysis, loader, report
 
-__all__ = ["loader"]
+__all__ = ["analysis", "loader", "report"]
