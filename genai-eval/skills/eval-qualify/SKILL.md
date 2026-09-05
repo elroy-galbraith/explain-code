@@ -1,6 +1,6 @@
 ---
 name: eval-qualify
-description: Qualify a GenAI evaluation instrument and report its results — measure judge–human agreement with confidence intervals against the human–human ceiling, run item analysis and a power calculation, and check the design gates. Use when the user asks "is my LLM judge reliable", "how good is my eval", "compute Krippendorff's alpha / Cohen's kappa", "is this result significant", "do I have enough items", "audit this benchmark", or hands over judge scores and human labels. Runs standalone on a two-column CSV — no eval card required. Not for designing an eval that does not exist yet.
+description: Qualify a GenAI evaluation instrument and report its results — measure judge–human agreement with confidence intervals against the human–human ceiling, probe length and self-preference bias, run a power check, and cluster the disagreements. Use when the user asks "is my LLM judge reliable", "how good is my eval", "compute Krippendorff's alpha / Cohen's kappa", "is this result significant", "do I have enough items", "audit this benchmark", or hands over judge scores and human labels. Runs standalone on a two-column CSV — no eval card required. Not for designing an eval that does not exist yet.
 ---
 
 # Eval Qualify
@@ -15,7 +15,9 @@ to hand you a clean-looking number that outruns what the sample supports.
 
 - "Is my LLM judge reliable?"
 - "How good is my eval?"
-- "Compute Krippendorff's alpha / Cohen's kappa for these ratings."
+- "Compute Krippendorff's alpha / Cohen's kappa for these ratings." (The
+  report computes Krippendorff's alpha, which handles two raters and
+  missing ratings; say that rather than implying a kappa was run.)
 - "Is this result statistically significant?"
 - "Do I have enough items to trust this comparison?"
 - "Audit this benchmark."
@@ -47,20 +49,26 @@ will check and skip — before running the tool, not after. Guessing at a
 number and backfilling the tier is the failure mode this step exists to
 prevent.
 
-| Tier | Trigger | Gates in scope |
-|---|---|---|
-| 1 — daily regression | Catch breakage | 9, 10, 11 (light) |
-| 2 — per release | Compare options | + 7 |
-| 3 — sign-off / external claim | Defend a claim | + 8 (all) |
+| Tier | Trigger | Gates in scope | What produces them |
+|---|---|---|---|
+| 1 — daily regression | Catch breakage | 9, 10, 11 (light) | your judgement, from the report and the conversation |
+| 2 — per release | Compare options | + 7 | `--mid` and the report's power section |
+| 3 — sign-off / external claim | Defend a claim | + 8 (all) | your judgement, plus evidence from outside this tool |
 
 Gate 9 is "was the threshold set before this run", Gate 10 is "did the result
 cross it", Gate 11 is "is the scale saturated or the item pool leaked" — all
 three are cheap enough to check on every run, which is why Tier 1 always
-includes them. Tier 2 adds Gate 7, the power calculation, because comparing
-options needs to know the sample can actually detect a difference. Tier 3
-adds Gate 8, criterion validity evidence, which is judgement rather than a
-computation and is the reason a sign-off claim needs a human in the loop, not
-just a script.
+includes them. None of the three is computed by `calibrate.py`: they are
+judgement calls you make from the report and from what the team can tell you.
+Nothing in the tool knows when a threshold was set, and the toolkit's
+scale-saturation functions are not wired into the report, so a saturation or
+leakage claim is yours to make and to justify from the score distribution and
+the item pool — do not report it as something the tool checked.
+
+Tier 2 adds Gate 7, the power calculation, which the report does compute
+whenever `--mid` is given. Tier 3 adds Gate 8, criterion validity evidence,
+which is judgement rather than a computation and is the reason a sign-off
+claim needs a human in the loop, not just a script.
 
 The tier table does not list Gate 6 — judge-human agreement reaching the
 human-human ceiling — because it is not tier-gated: it is the core of what
@@ -100,8 +108,12 @@ set it to `ordinal` or `interval` whenever the scale has an order, since
 nominal agreement penalizes a 4-vs-5 disagreement as heavily as a 1-vs-5 one.
 `--categories` is required for a non-numeric ordinal or interval scale, must
 be given low to high, and **must name every rating value that appears in the
-data** — a rating the list omits raises an error rather than silently
-sorting wrong. `--judge-model` turns on the self-preference probe.
+data, once each** — a rating the list omits, or one it repeats, raises an
+error rather than silently sorting wrong. It also decides how the length-bias
+probe ranks word labels, so pass it whenever the ratings are words even at
+`--level nominal`; without it that probe is skipped and says so rather than
+ranking `low`, `medium`, `high` alphabetically. `--judge-model` turns on the
+self-preference probe, which needs numeric scores.
 `--mid` sets the minimum interesting difference for the power check; without
 it, the report still tells you the smallest difference the sample size can
 detect, just not whether that's enough for your purposes. `--seed` makes the
@@ -144,11 +156,12 @@ afterward read as hedging rather than as the frame the number has to sit
 inside. Order is not a formality here — it is the difference between a
 qualification report and a number laundered through one.
 
-When the report says a verdict is unavailable — most commonly "no ceiling"
-because there is only one human rater — that sentence is not boilerplate.
-Say it to the user in those terms: there is no floor to compare the judge
-against, so nothing below can tell them whether the judge is good enough,
-only whether it is internally consistent with the one rater it has.
+When the report says no verdict is possible, that sentence is not
+boilerplate — and it names which of three situations you are in, so read it
+before you paraphrase it. Only one of the three is "there is only one human
+rater". Say to the user what the report actually says: there is nothing to
+compare the judge against, so nothing below can tell them whether the judge
+is good enough, only whether it is internally consistent with what it has.
 
 ### Step 4 — Interpret the ceiling verdict against the decision from Step 1
 
@@ -166,11 +179,23 @@ it means abstractly:
   accuracy. Whether that cost is acceptable depends entirely on the tier and
   the decision: a small, well-characterized gap may be fine for a Tier 1
   regression trip-wire and disqualifying for a Tier 3 external claim.
-- **`no_ceiling`** — there is only one human rater, so there is no ceiling to
-  compare against. Gate 6 is unanswered, not failed: the data cannot say
-  whether the judge is good enough, in either direction. The next action is
-  almost always to get a second rater (see Step 6), not to treat the judge's
-  agreement figure as if it had cleared a bar that was never there.
+- **No verdict** — the comparison could not be made. Gate 6 is unanswered,
+  not failed: the data cannot say whether the judge is good enough, in either
+  direction. Three different situations produce this, and the report's
+  sentence says which one, so do not reach for "there is only one human
+  rater" by reflex:
+  - **One human rater column**, so there is no ceiling at all. The next
+    action is a second rater on a subset of the same items (see Step 6).
+  - **Two rater columns whose own agreement is undefined** — they used a
+    single category between them, say. A ceiling was attempted and came back
+    undefined; the fix is items that vary, not another rater.
+  - **A defined ceiling and an undefined judge figure** — the report prints
+    a ceiling above this sentence. The judge's own alpha could not be
+    computed, usually because its scores never varied. The fix is on the
+    judge's side.
+
+  In none of the three does the judge's agreement figure get to be read as
+  if it had cleared a bar that was never there.
 
 ### Step 5 — Name the disagreement clusters by reading the items, not the scores
 

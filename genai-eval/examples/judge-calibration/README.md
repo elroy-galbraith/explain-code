@@ -31,18 +31,21 @@ falls below the ceiling — humans agree with each other more than the judge
 agrees with them, so automating this rubric costs measurable accuracy.
 
 **Statistical power.** The observed exact-agreement rate (judge equals human
-on the raw label) is 0.750 over 24 items. With n = 24, the smallest
-agreement-rate difference this sample could reliably detect is 0.999 — in
-practical terms, none. Detecting a difference of 0.10 (the `--mid` given
-above) in that agreement rate would need 248 items; this sample has 24, which
-the tool correctly reports as not enough. This is a separate statistic from
-the alpha figures above, but it makes the same point from another angle: 24
-items is a small sample, and this report says so rather than dressing up a
-precise-looking interval.
+on the raw label) is 0.750, over the 24 rows carrying both a judge score and a
+human label. At that sample size the smallest difference this data could
+reliably detect is **0.249** — that is, an agreement rate of 0.999 against
+the 0.750 baseline. Nothing short of near-perfect agreement would register as
+a difference here. Detecting a difference of 0.10 (the `--mid` given above)
+would need 248 items per group; this sample has 24, which the tool reports as
+not enough. This is a separate statistic from the alpha figures above, but it
+makes the same point from another angle: 24 items is a small sample, and this
+report says so rather than dressing up a precise-looking interval.
 
 **Length bias, n = 24.** Judge score vs. response length: rho = 0.584. Human
 score vs. response length: rho = 0.304. Gap = **0.280**. The judge rewards
-length noticeably more than the humans do.
+length noticeably more than the humans do. This probe reads `human_a` alone,
+as the report's limits section says: only the agreement figures pool both
+raters.
 
 **Largest disagreement cluster, n = 24 (6 items disagree, 18 agree).**
 Human = 3, judge = 4: 3 items (50% of all disagreements) — `i02`, `i13`, `i24`.
@@ -98,4 +101,7 @@ The tool says this plainly, and it's worth repeating here rather than letting
 the numbers above stand alone: this report measures *agreement*, not
 *correctness* — a judge that agrees with a mistaken human is still wrong. And
 at n = 24, none of the confidence intervals above should be read as more
-precise than they are.
+precise than they are. Three of its sections — the length probe, the
+disagreement clusters and the power baseline — read the first human rater
+column only, so the length and cluster findings above are against `human_a`,
+not against both raters pooled.

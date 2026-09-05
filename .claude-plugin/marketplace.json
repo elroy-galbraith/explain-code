@@ -35,7 +35,7 @@
     {
       "name": "genai-eval",
       "source": "./genai-eval",
-      "description": "Qualify a GenAI evaluation as a measurement instrument: judge-human agreement with confidence intervals against the human-human ceiling, classical item analysis, power against a minimum detectable effect, judge bias probes, and an observed disagreement taxonomy. Runs standalone on a two-column CSV of judge scores and human labels; stdlib-only."
+      "description": "Qualify a GenAI evaluation as a measurement instrument: judge-human agreement with confidence intervals against the human-human ceiling, power against a minimum detectable effect, length and self-preference bias probes, and an observed disagreement taxonomy. Runs standalone on a two-column CSV of judge scores and human labels; stdlib-only."
     }
   ]
 }

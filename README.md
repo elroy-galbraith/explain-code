@@ -64,8 +64,7 @@ its numbers get trusted. Its `eval-qualify` skill runs a stdlib-only CLI over a
 CSV of judge scores and human labels and reports chance-corrected agreement
 against the human-human ceiling (not just the judge's own number), a power
 check against a stated minimum interesting difference, judge bias probes
-(length, position, self-preference, prompt sensitivity), and disagreement
-clusters for a human to name. It is deliberately more willing to report "this
+(length and self-preference), and disagreement clusters for a human to name. It is deliberately more willing to report "this
 data cannot answer that" than to hand back a confident number the sample
 doesn't support — with only one human rater, for instance, there is no ceiling
 to compare against, and the report says so before any agreement figure. High

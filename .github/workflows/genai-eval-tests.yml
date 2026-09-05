@@ -51,4 +51,25 @@ jobs:
           set -euo pipefail
           python3 genai-eval/scripts/calibrate.py \
             genai-eval/examples/judge-calibration/labels.csv \
-            --level ordinal --judge-model model-a --mid 0.10 --seed 7 > /dev/null
+            --level ordinal --judge-model model-a --mid 0.10 --seed 7 \
+            > worked-example.md
+          # Exit 0 alone would pass on an empty report, so check that each
+          # section the example is documented to produce actually appears.
+          grep -q "Judge-human agreement" worked-example.md
+          grep -q "Human-human agreement" worked-example.md
+          grep -q "Length: judge rho" worked-example.md
+          grep -q "Disagreement clusters" worked-example.md
+
+      - name: Verify the single-rater path still discloses the missing ceiling
+        run: |
+          set -euo pipefail
+          # The behaviour this whole phase exists to deliver: with one human
+          # rater column there is no ceiling, and the report has to say Gate 6
+          # is unanswered rather than letting the judge's figure read as if it
+          # had cleared a bar. Nothing else in CI exercises that path.
+          printf 'item_id,human,judge\ni1,1,1\ni2,1,2\ni3,2,2\ni4,2,1\ni5,1,1\ni6,2,2\n' \
+            > one-rater.csv
+          python3 genai-eval/scripts/calibrate.py one-rater.csv --seed 7 \
+            > one-rater.md
+          grep -q "Gate 6" one-rater.md
+          grep -q "no human-human ceiling" one-rater.md

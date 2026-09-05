@@ -17,9 +17,11 @@ setup, no dependencies beyond the Python standard library:
 - **A power check** against a stated minimum interesting difference, so a
   precise-looking gap doesn't get treated as real when the sample is too
   small to have detected it either way.
-- **Judge bias probes**: does the judge reward length, position, or its own
-  model's outputs more than the human raters do; is it sensitive to prompt
-  rewording that shouldn't change the verdict.
+- **Judge bias probes**: does the judge reward length more than the human
+  raters do, and does it score its own model's outputs higher than everyone
+  else's. A probe the available columns cannot support is named in the
+  report, never silently skipped — a skipped probe reads as a probe that
+  found nothing.
 - **Disagreement clusters** — counted by the script, grouped by which
   human/judge score pair they fall into. The script does not name the
   pattern behind a cluster; that takes reading the actual items, which is a
@@ -52,6 +54,13 @@ prints — it is a pure computation layer, imported by `scripts/calibration/`
 (which does the CSV loading and report rendering) and by `calibrate.py`
 itself.
 
+The report uses part of that toolkit, not all of it: Krippendorff's alpha
+with a bootstrap interval, the length and self-preference probes, and the
+two-proportion power functions. Item analysis, the three kappas, scale
+saturation, position bias and prompt sensitivity are tested and available to
+import, but nothing in `calibrate.py` calls them yet. Wiring them into the
+report is later work, not a claim about what today's report contains.
+
 ## The honesty rules
 
 The report is deliberately more willing to say "this data cannot answer
@@ -61,9 +70,12 @@ that" than to produce a number that outruns what the sample supports:
   is nothing to compare the judge's agreement against. The report says so in
   its opening section, before any agreement figure — "Gate 6 is unanswered,"
   not a number that reads as if it had passed one.
-- **No interval without its n.** Every confidence interval and correlation
-  in the report is printed with the item count it was computed from, so a
-  tight-looking interval from 8 items can't be mistaken for one from 800.
+- **No figure without its n.** Every agreement figure, correlation and bias
+  delta is printed with the number of items it was computed from — pairable
+  units for an alpha, rows complete in all three columns for the length
+  correlation, rows carrying both a judge score and a human label for the
+  power baseline — never the file's row count, so a tight-looking interval
+  from 8 items can't be mistaken for one from 800.
 - **Undefined is reported as undefined**, never silently coerced to zero or
   omitted. A statistic that cannot be computed from degenerate input (zero
   variance, a single category, one rater) renders as a dash, not a number
@@ -71,8 +83,7 @@ that" than to produce a number that outruns what the sample supports:
 - **Agreement is not correctness.** High agreement between the judge and
   humans shows the judge reproduces their judgments consistently — not that
   either is right. A judge agreeing with humans who are mistaken is still
-  wrong. The number means your judge is predictable like the humans; it says
-  nothing about whether all of you are accurate.
+  wrong.
 
 ## What this plugin does not do yet
 
