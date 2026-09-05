@@ -140,3 +140,87 @@ def fleiss_kappa(counts):
     if p_e == 1.0:
         raise ValueError("expected agreement is 1.0; kappa is undefined")
     return (p_bar - p_e) / (1.0 - p_e)
+
+
+def _coincidence(units):
+    """Build Krippendorff's coincidence matrix from per-unit rating lists.
+
+    Returns (matrix, values, marginals, total). Each unit contributes every
+    ordered pair of its present ratings, weighted 1/(m-1) where m is how many
+    ratings that unit actually has. That weighting is what lets units with
+    different numbers of raters sit in the same matrix.
+    """
+    present = [[v for v in unit if v is not None] for unit in units]
+    pairable = [unit for unit in present if len(unit) >= 2]
+    if not pairable:
+        raise ValueError(
+            "no unit has two or more ratings; alpha needs at least one pairable unit"
+        )
+
+    values = sorted({v for unit in pairable for v in unit})
+    index = {v: i for i, v in enumerate(values)}
+    k = len(values)
+
+    matrix = [[0.0] * k for _ in range(k)]
+    for unit in pairable:
+        m = len(unit)
+        weight = 1.0 / (m - 1)
+        for i, x in enumerate(unit):
+            for j, y in enumerate(unit):
+                if i != j:
+                    matrix[index[x]][index[y]] += weight
+
+    marginals = [sum(row) for row in matrix]
+    total = sum(marginals)
+    return matrix, values, marginals, total
+
+
+def _nominal_metric(values, marginals):
+    """Squared difference for unordered categories: 0 if equal, 1 if not."""
+
+    def delta(i, j):
+        return 0.0 if i == j else 1.0
+
+    return delta
+
+
+_METRICS = {"nominal": _nominal_metric}
+
+
+def krippendorff_alpha(units, level="nominal"):
+    """Krippendorff's alpha — chance-corrected agreement for any number of raters.
+
+    `units` is one list per item holding that item's ratings, using None for a
+    rating that is absent. Units with fewer than two present ratings are dropped
+    because they carry no pairable information.
+
+    `level` selects the difference function: "nominal" for unordered categories.
+    Later tasks add "ordinal" and "interval".
+
+    Returns 1.0 when expected disagreement is zero, which happens when every
+    rating in the data is identical — agreement is perfect and the chance
+    correction has nothing to correct.
+
+    Raises ValueError when no unit is pairable or the level is unknown.
+    """
+    if level not in _METRICS:
+        raise ValueError(
+            "level must be one of %s" % ", ".join(sorted(_METRICS))
+        )
+
+    matrix, values, marginals, total = _coincidence(units)
+    delta = _METRICS[level](values, marginals)
+    k = len(values)
+
+    observed = sum(
+        matrix[i][j] * delta(i, j) for i in range(k) for j in range(k)
+    ) / total
+    expected = sum(
+        marginals[i] * marginals[j] * delta(i, j)
+        for i in range(k)
+        for j in range(k)
+    ) / (total * (total - 1))
+
+    if expected == 0.0:
+        return 1.0
+    return 1.0 - observed / expected

@@ -141,5 +141,73 @@ class TestFleissKappa(unittest.TestCase):
             agreement.fleiss_kappa([[1, 0], [0, 1]])
 
 
+class TestKrippendorffNominal(unittest.TestCase):
+    def test_known_answer_complete_data(self):
+        """Four units, two raters, no missing data.
+
+        units = [[a,a], [a,b], [b,b], [b,b]]
+        Each unit has m = 2 ratings, so each ordered pair carries weight
+        1/(m-1) = 1. The coincidence matrix is o_aa = 2, o_ab = 1, o_ba = 1,
+        o_bb = 4, total n = 8, marginals n_a = 3, n_b = 5.
+        D_o = (o_ab + o_ba)/n = 2/8 = 0.25
+        D_e = (n_a*n_b + n_b*n_a)/(n(n-1)) = 30/56
+        alpha = 1 - 0.25/(30/56) = 1 - 7/15 = 8/15
+        """
+        units = [["a", "a"], ["a", "b"], ["b", "b"], ["b", "b"]]
+        self.assertAlmostEqual(
+            agreement.krippendorff_alpha(units), 8 / 15, places=10
+        )
+
+    def test_known_answer_with_missing_data(self):
+        """Three raters, four units, two ratings missing.
+
+        units = [[a,a,a], [a,b,b], [b,b,None], [None,b,b]]
+        The first two units have m = 3, so each of their 6 ordered pairs carries
+        weight 1/2; the last two have m = 2 and carry weight 1.
+        Coincidence: o_aa = 3, o_ab = 1, o_ba = 1, o_bb = 5, n = 10,
+        marginals n_a = 4, n_b = 6.
+        D_o = 2/10 = 0.2
+        D_e = (24 + 24)/(10*9) = 48/90
+        alpha = 1 - 0.2/(48/90) = 1 - 0.375 = 0.625
+        """
+        units = [
+            ["a", "a", "a"],
+            ["a", "b", "b"],
+            ["b", "b", None],
+            [None, "b", "b"],
+        ]
+        self.assertAlmostEqual(
+            agreement.krippendorff_alpha(units), 0.625, places=10
+        )
+
+    def test_perfect_agreement_is_one(self):
+        units = [["a", "a"], ["b", "b"], ["c", "c"], ["a", "a"]]
+        self.assertAlmostEqual(agreement.krippendorff_alpha(units), 1.0, places=10)
+
+    def test_systematic_disagreement_is_negative(self):
+        """Two raters who always disagree do worse than chance."""
+        units = [["a", "b"], ["b", "a"], ["a", "b"], ["b", "a"]]
+        self.assertLess(agreement.krippendorff_alpha(units), 0.0)
+
+    def test_units_with_one_rating_are_dropped(self):
+        """A unit rated once carries no pairable information, so adding one
+        must not change the result."""
+        base = [["a", "a"], ["a", "b"], ["b", "b"], ["b", "b"]]
+        padded = base + [["a", None]]
+        self.assertAlmostEqual(
+            agreement.krippendorff_alpha(base),
+            agreement.krippendorff_alpha(padded),
+            places=10,
+        )
+
+    def test_no_pairable_units_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.krippendorff_alpha([["a", None], ["b", None]])
+
+    def test_unknown_level_raises(self):
+        with self.assertRaises(ValueError):
+            agreement.krippendorff_alpha([["a", "a"], ["a", "b"]], level="ratio")
+
+
 if __name__ == "__main__":
     unittest.main()
