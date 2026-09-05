@@ -68,9 +68,11 @@ check against a stated minimum interesting difference, judge bias probes
 clusters for a human to name. It is deliberately more willing to report "this
 data cannot answer that" than to hand back a confident number the sample
 doesn't support — with only one human rater, for instance, there is no ceiling
-to compare against, and the report says so before any agreement figure. It
-qualifies evaluations that already produce scores; designing one from scratch
-(`eval-design`) is a later phase and doesn't exist yet.
+to compare against, and the report says so before any agreement figure. High
+agreement shows the judge reproduces human judgments, not that they are right;
+a judge agreeing with mistaken humans is still wrong. It qualifies evaluations
+that already produce scores; designing one from scratch (`eval-design`) is a
+later phase and doesn't exist yet.
 
 ## Install
 
@@ -145,7 +147,7 @@ See [Keeping third-party plugins in sync](#keeping-third-party-plugins-in-sync).
 Plugins in this marketplace come from two kinds of `source`:
 
 - **Authored here** (`explain-code`, `improvement-plan`,
-  `simplified-technical-english`, `microworld`) use a local path, e.g.
+  `simplified-technical-english`, `microworld`, `genai-eval`) use a local path, e.g.
   `"source": "./explain-code"`. Their files live in this repo.
 - **Third-party** (`humanizer`) use a GitHub source that points straight at the
   upstream repo, pinned to a tag:

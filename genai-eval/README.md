@@ -68,6 +68,11 @@ that" than to produce a number that outruns what the sample supports:
   omitted. A statistic that cannot be computed from degenerate input (zero
   variance, a single category, one rater) renders as a dash, not a number
   that happens to be zero.
+- **Agreement is not correctness.** High agreement between the judge and
+  humans shows the judge reproduces their judgments consistently — not that
+  either is right. A judge agreeing with humans who are mistaken is still
+  wrong. The number means your judge is predictable like the humans; it says
+  nothing about whether all of you are accurate.
 
 ## What this plugin does not do yet
 
