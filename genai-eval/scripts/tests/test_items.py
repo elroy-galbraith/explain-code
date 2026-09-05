@@ -131,5 +131,76 @@ class TestKR20(unittest.TestCase):
             items.kr20([[1, 0], [1]])
 
 
+class TestEigenvalues(unittest.TestCase):
+    def test_two_by_two_known_answer(self):
+        """A 2x2 correlation matrix [[1, r], [r, 1]] has eigenvalues 1+r and 1-r.
+        With r = 0.6 that is 1.6 and 0.4."""
+        got = items.eigenvalues_symmetric([[1.0, 0.6], [0.6, 1.0]])
+        self.assertAlmostEqual(got[0], 1.6, places=9)
+        self.assertAlmostEqual(got[1], 0.4, places=9)
+
+    def test_equicorrelated_three_by_three_known_answer(self):
+        """An equicorrelated 3x3 with r = 0.5 has eigenvalues 1+2r = 2.0 and
+        1-r = 0.5 twice."""
+        m = [[1.0, 0.5, 0.5], [0.5, 1.0, 0.5], [0.5, 0.5, 1.0]]
+        got = items.eigenvalues_symmetric(m)
+        self.assertAlmostEqual(got[0], 2.0, places=9)
+        self.assertAlmostEqual(got[1], 0.5, places=9)
+        self.assertAlmostEqual(got[2], 0.5, places=9)
+
+    def test_identity_has_unit_eigenvalues(self):
+        got = items.eigenvalues_symmetric([[1.0, 0.0], [0.0, 1.0]])
+        self.assertAlmostEqual(got[0], 1.0, places=9)
+        self.assertAlmostEqual(got[1], 1.0, places=9)
+
+    def test_trace_is_preserved(self):
+        """Eigenvalues of a symmetric matrix sum to its trace."""
+        m = [[1.0, 0.3, -0.2], [0.3, 1.0, 0.4], [-0.2, 0.4, 1.0]]
+        self.assertAlmostEqual(sum(items.eigenvalues_symmetric(m)), 3.0, places=9)
+
+    def test_asymmetric_matrix_raises(self):
+        with self.assertRaises(ValueError):
+            items.eigenvalues_symmetric([[1.0, 0.5], [0.2, 1.0]])
+
+    def test_non_square_matrix_raises(self):
+        with self.assertRaises(ValueError):
+            items.eigenvalues_symmetric([[1.0, 0.5]])
+
+
+class TestDimensionality(unittest.TestCase):
+    def test_returns_one_eigenvalue_per_item(self):
+        result = items.dimensionality(GUTTMAN)
+        self.assertEqual(len(result["eigenvalues"]), 4)
+
+    def test_eigenvalues_sum_to_item_count(self):
+        """A correlation matrix has 1.0 down its diagonal, so its trace equals
+        its size, and eigenvalues sum to the trace. Four items always total 4."""
+        result = items.dimensionality(GUTTMAN)
+        self.assertAlmostEqual(sum(result["eigenvalues"]), 4.0, places=9)
+
+    def test_eigenvalues_are_descending(self):
+        values = items.dimensionality(GUTTMAN)["eigenvalues"]
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_summary_fields_agree_with_the_eigenvalues(self):
+        result = items.dimensionality(GUTTMAN)
+        values = result["eigenvalues"]
+        self.assertAlmostEqual(
+            result["first_ratio"], values[0] / sum(values), places=12
+        )
+        self.assertEqual(
+            result["n_above_one"], sum(1 for v in values if v > 1.0)
+        )
+
+    def test_duplicated_item_produces_a_zero_eigenvalue(self):
+        """Two identical items carry one item's worth of information, so the
+        correlation matrix is rank-deficient and its smallest eigenvalue is 0.
+        This is the signature of a redundant item in the pool."""
+        duplicated = [row + [row[0]] for row in GUTTMAN]
+        values = items.dimensionality(duplicated)["eigenvalues"]
+        self.assertEqual(len(values), 5)
+        self.assertAlmostEqual(values[-1], 0.0, places=8)
+
+
 if __name__ == "__main__":
     unittest.main()
