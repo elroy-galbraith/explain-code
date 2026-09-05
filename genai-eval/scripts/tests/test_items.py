@@ -167,6 +167,59 @@ class TestEigenvalues(unittest.TestCase):
             items.eigenvalues_symmetric([[1.0, 0.5]])
 
 
+class TestCorrelationMatrix(unittest.TestCase):
+    def test_known_answer_two_items(self):
+        """The first two Guttman columns: [1,1,1,1,0] and [1,1,1,0,0].
+
+        p0 = 0.8, p1 = 0.6, and both items pass together on 3 of 5 respondents.
+        cov  = 0.6 - 0.8 * 0.6 = 0.12
+        sd0  = sqrt(0.8 * 0.2) = 0.4
+        sd1  = sqrt(0.6 * 0.4) = sqrt(0.24)
+        r    = 0.12 / (0.4 * sqrt(0.24)) = 3 / (2 * sqrt(6)) = sqrt(6) / 4
+        """
+        import math
+
+        matrix = [[row[0], row[1]] for row in GUTTMAN]
+        result = items.correlation_matrix(matrix)
+        expected = math.sqrt(6) / 4
+
+        self.assertAlmostEqual(result[0][0], 1.0, places=12)
+        self.assertAlmostEqual(result[1][1], 1.0, places=12)
+        self.assertAlmostEqual(result[0][1], expected, places=12)
+        self.assertAlmostEqual(result[1][0], expected, places=12)
+
+    def test_zero_variance_item_correlates_with_nothing(self):
+        """An item everyone passes has no variance, so it correlates with
+        nothing. Its row and column are zero apart from the 1.0 on the
+        diagonal, which keeps the matrix square and symmetric for the
+        eigenvalue solver instead of dividing by zero."""
+        matrix = [[row[0], row[1], 1] for row in GUTTMAN]
+        result = items.correlation_matrix(matrix)
+
+        self.assertEqual(result[2], [0.0, 0.0, 1.0])
+        self.assertEqual([row[2] for row in result], [0.0, 0.0, 1.0])
+
+    def test_result_is_square_and_symmetric(self):
+        """The eigenvalue solver rejects a non-symmetric matrix, so this is a
+        precondition for dimensionality() working at all."""
+        result = items.correlation_matrix(GUTTMAN)
+
+        self.assertEqual(len(result), 4)
+        for row in result:
+            self.assertEqual(len(row), 4)
+        for i in range(4):
+            for j in range(4):
+                self.assertAlmostEqual(result[i][j], result[j][i], places=12)
+
+    def test_empty_raises(self):
+        with self.assertRaises(ValueError):
+            items.correlation_matrix([])
+
+    def test_ragged_matrix_raises(self):
+        with self.assertRaises(ValueError):
+            items.correlation_matrix([[1, 0], [1]])
+
+
 class TestDimensionality(unittest.TestCase):
     def test_returns_one_eigenvalue_per_item(self):
         result = items.dimensionality(GUTTMAN)
