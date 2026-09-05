@@ -184,6 +184,14 @@ class TestKrippendorffNominal(unittest.TestCase):
         units = [["a", "a"], ["b", "b"], ["c", "c"], ["a", "a"]]
         self.assertAlmostEqual(agreement.krippendorff_alpha(units), 1.0, places=10)
 
+    def test_single_category_raises(self):
+        """One distinct rating across all pairable units means expected
+        disagreement is zero, so alpha is undefined rather than 1.0 — there is
+        no chance agreement to correct for. Returning a number here let
+        bootstrap_ci count information-free resamples as perfect agreement."""
+        with self.assertRaises(ValueError):
+            agreement.krippendorff_alpha([["a", "a"], ["a", "a"]])
+
     def test_systematic_disagreement_is_negative(self):
         """Two raters who always disagree do worse than chance."""
         units = [["a", "b"], ["b", "a"], ["a", "b"], ["b", "a"]]
@@ -315,6 +323,21 @@ class TestBootstrapCI(unittest.TestCase):
     def test_too_few_units_raises(self):
         with self.assertRaises(ValueError):
             agreement.bootstrap_ci([["a", "a"]], agreement.krippendorff_alpha)
+
+    def test_homogeneous_sample_does_not_pin_the_upper_bound_to_one(self):
+        """Regression test for a composition bug between two correct-looking
+        pieces. With 9 agreeing units and 1 disagreeing, roughly a third of
+        resamples contain only one category. Those carry no information, so
+        they must be skipped rather than scored 1.0 — otherwise the upper
+        bound lands on exactly 1.0, which is the number a reader would use to
+        argue a judge is good enough."""
+        low, high = agreement.bootstrap_ci(
+            self._units(9, 1),
+            agreement.krippendorff_alpha,
+            n_resamples=2000,
+            seed=1,
+        )
+        self.assertLess(high, 1.0)
 
     def test_mostly_degenerate_resamples_raise(self):
         """A statistic that almost always fails must not silently yield an

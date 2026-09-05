@@ -244,11 +244,17 @@ def krippendorff_alpha(units, level="nominal"):
     `level` selects the difference function: "nominal" for unordered categories,
     "ordinal" for ranked categories, "interval" for numeric ratings.
 
-    Returns 1.0 when expected disagreement is zero, which happens when every
-    rating in the data is identical — agreement is perfect and the chance
-    correction has nothing to correct.
+    CAVEAT — for "ordinal" and "interval", scale order comes from the natural
+    sort of the rating values themselves, not from any notion of what the
+    values mean. Encode ordered categories as ordered values: 1, 2, 3 or a, b,
+    c. Word labels like fail/weak/adequate/strong sort alphabetically
+    ("adequate" first, "weak" last), so using "ordinal" or "interval" with them
+    yields a confident, wrong answer with no warning.
 
-    Raises ValueError when no unit is pairable or the level is unknown.
+    Raises ValueError when no unit is pairable, the level is unknown, or every
+    rating in the pairable data is identical — matching cohens_kappa,
+    weighted_kappa and fleiss_kappa, which already raise on single-category
+    input instead of returning a number for an undefined statistic.
     """
     if level not in _METRICS:
         raise ValueError(
@@ -269,7 +275,11 @@ def krippendorff_alpha(units, level="nominal"):
     ) / (total * (total - 1))
 
     if expected == 0.0:
-        return 1.0
+        raise ValueError(
+            "every rating in the pairable data is identical, so expected "
+            "disagreement is zero and alpha is undefined; chance-corrected "
+            "agreement has no meaning when chance has no variance to correct"
+        )
     return 1.0 - observed / expected
 
 
