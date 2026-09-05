@@ -1,0 +1,44 @@
+name: genai-eval toolkit tests
+
+# Runs the evalstats test suites. What these guard that isn't obvious:
+#
+#   1. Every statistic here is pinned by a known-answer test with the arithmetic
+#      shown in the test docstring. A refactor that silently changes a chance
+#      correction or a variance divisor produces a plausible number, not an
+#      error, and only the pinned values catch it.
+#   2. The degenerate-input cases (one human rater, zero variance, single
+#      category) must raise or return None rather than return a number. A
+#      confident-looking statistic computed from nothing is the failure mode
+#      this plugin exists to prevent.
+#
+# Pure Python 3 standard library — no install step needed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "genai-eval/**"
+      - ".github/workflows/genai-eval-tests.yml"
+  pull_request:
+    paths:
+      - "genai-eval/**"
+      - ".github/workflows/genai-eval-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run the evalstats test suites
+        run: |
+          python3 -m unittest discover -s genai-eval/scripts/tests -p "test_*.py" -v
