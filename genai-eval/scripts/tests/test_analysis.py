@@ -115,6 +115,42 @@ class TestDegenerate(unittest.TestCase):
             result["notes"],
         )
 
+    def test_undefined_ceiling_gives_no_verdict_even_with_two_raters(self):
+        """Both raters gave every item the same score, so the ceiling itself is
+        undefined. The judge's own alpha is computable, and the tempting bug is
+        to report it as passing — there is nothing to pass against.
+
+        Guards the first of two branches that a swapped elif would silently
+        skip while still passing every other test in this file.
+        """
+        data = make_data(
+            [1, 2, 1, 2],
+            {"human_a": [1, 1, 1, 1], "human_b": [1, 1, 1, 1]},
+        )
+        result = analysis.agreement_section(data, seed=1, n_resamples=200)
+
+        self.assertIsNotNone(result["judge_human"]["alpha"])
+        self.assertIsNone(result["human_human"]["alpha"])
+        self.assertFalse(result["ceiling_available"])
+        self.assertEqual(result["verdict"], "no_ceiling")
+
+    def test_undefined_judge_alpha_gives_no_verdict_even_with_a_ceiling(self):
+        """The mirror case: the raters disagree enough for a real ceiling, but
+        the judge matched the pooled human on every item, so its own alpha is
+        undefined. A comparison against None must not happen.
+
+        Guards the second of the two branches.
+        """
+        data = make_data(
+            [1, 1, 1, 1],
+            {"human_a": [1, 1, 1, 1], "human_b": [1, 2, 1, 2]},
+        )
+        result = analysis.agreement_section(data, seed=1, n_resamples=200)
+
+        self.assertIsNone(result["judge_human"]["alpha"])
+        self.assertIsNotNone(result["human_human"]["alpha"])
+        self.assertEqual(result["verdict"], "no_ceiling")
+
 
 if __name__ == "__main__":
     unittest.main()
