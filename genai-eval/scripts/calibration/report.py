@@ -45,6 +45,10 @@ NO_VERDICT_TEXT = {
         "No verdict is possible: the ceiling above is defined, but the "
         "judge's own agreement figure is not, so the two cannot be compared."
     ),
+    "not_computed": (
+        "No verdict is possible: the agreement section could not be computed. "
+        "Its reason is in the limits above."
+    ),
 }
 
 
@@ -53,6 +57,8 @@ def _verdict(agreement_result):
     verdict = agreement_result["verdict"]
     if verdict in VERDICT_TEXT:
         return VERDICT_TEXT[verdict]
+    if verdict != "no_ceiling":
+        return NO_VERDICT_TEXT["not_computed"]
     if agreement_result["human_human"] is None:
         return NO_VERDICT_TEXT["no_second_rater"]
     if not agreement_result["ceiling_available"]:
@@ -80,8 +86,16 @@ def _interval(block):
 
 
 def render(data, agreement_result, bias_result, clusters, power_result,
-           title=None):
-    """Assemble the markdown calibration report."""
+           title=None, section_errors=None):
+    """Assemble the markdown calibration report.
+
+    `section_errors` names any section that could not be computed at all.
+    Those lines open the limits section, because a reader looking for what
+    this report cannot tell them should find a missing section there rather
+    than infer it from a gap further down. `clusters` is None for the same
+    reason: an empty list means the judge and the human never disagreed, which
+    is a finding, not a failure.
+    """
     lines = ["# %s" % (title or "Judge calibration report"), ""]
 
     lines += [
@@ -91,7 +105,8 @@ def render(data, agreement_result, bias_result, clusters, power_result,
         "## What this report cannot tell you",
         "",
     ]
-    limits = list(data.notes) + list(agreement_result["notes"])
+    limits = ["**%s**" % error for error in (section_errors or [])]
+    limits += list(data.notes) + list(agreement_result["notes"])
     if agreement_result["verdict"] not in VERDICT_TEXT:
         limits.append(
             "**Gate 6 is unanswered.** Whether the judge is good enough to "
@@ -171,6 +186,14 @@ def render(data, agreement_result, bias_result, clusters, power_result,
     lines.append("")
 
     lines += ["## Judge bias", ""]
+    if (
+        bias_result["length"] is None
+        and bias_result["self_preference"] is None
+        and not bias_result["unavailable"]
+    ):
+        # No probe ran and none was named unavailable, so the section itself
+        # did not run. An empty heading would read as "nothing to report".
+        lines += ["Not computed. The reason is in the limits above.", ""]
     if bias_result["length"] is not None:
         gap = bias_result["length"]["gap"]
         lines.append(
@@ -207,7 +230,9 @@ def render(data, agreement_result, bias_result, clusters, power_result,
         lines.append("")
 
     lines += ["## Disagreement clusters", ""]
-    if not clusters:
+    if clusters is None:
+        lines.append("Not computed. The reason is in the limits above.")
+    elif not clusters:
         lines.append("The judge and the human never disagreed.")
     else:
         lines += [

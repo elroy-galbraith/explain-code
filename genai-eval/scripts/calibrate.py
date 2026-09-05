@@ -27,7 +27,41 @@ from calibration import analysis, loader, report
 from evalstats import agreement
 
 
+def _run_section(name, compute, fallback, errors):
+    """Run one section. A section that cannot run must not erase the rest.
+
+    The whole thesis of this tool is "report what you can and name what you
+    cannot", and aborting the entire report because one probe met an input it
+    did not expect contradicts that at the worst possible moment - when
+    something in the data is unusual. The reason is surfaced in the report's
+    limits section, where a reader is already looking for what it could not
+    do.
+
+    Genuine user errors - a missing file, an undetectable column, an
+    incomplete --categories - are raised before any section runs and still
+    exit 1 with nothing printed.
+    """
+    try:
+        return compute()
+    except Exception as exc:  # deliberately broad: see the docstring above
+        errors.append(
+            "The %s section could not be computed: %s: %s"
+            % (name, type(exc).__name__, exc)
+        )
+        return fallback
+
+
 def main(argv=None):
+    # Set the error handler only, never the encoding. The report contains
+    # characters a legacy console codepage cannot encode - the em dash, for
+    # one - and under PYTHONIOENCODING=cp437 the documented command died with
+    # UnicodeEncodeError before printing anything. Forcing UTF-8 here would
+    # mojibake that em dash on the cp1252 consoles that render it correctly
+    # today; "replace" keeps every currently-correct rendering and degrades an
+    # unrepresentable character to "?" instead of destroying the report.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
+
     parser = argparse.ArgumentParser(
         description="Measure whether an LLM judge agrees with humans well "
         "enough to trust, and say plainly what the data cannot support."
@@ -51,7 +85,10 @@ def main(argv=None):
     parser.add_argument(
         "--categories",
         help="Comma-separated scale order, low to high. Required for ordinal "
-        "or interval levels with non-numeric labels.",
+        "or interval levels with non-numeric labels. It must name every "
+        "rating value that appears in the judge and human columns, and name "
+        "each one once: an omitted rating is rejected rather than ranked as a "
+        "guess, and a repeated one would take its last position in the order.",
     )
     parser.add_argument(
         "--mid", type=float,
@@ -85,6 +122,26 @@ def main(argv=None):
                     "produce a confident wrong answer" % args.level
                 )
 
+        if categories is not None and data.numeric.get(data.judge_column, False):
+            # The loader coerces a numeric column to floats, so a scale stated
+            # as text covers none of its ratings: "1" is not 1.0. Take each
+            # entry through the same float() path that column took. Normalising
+            # both sides with str() instead would only move the failure into
+            # krippendorff_alpha, which indexes the ratings by the scale's own
+            # values.
+            numeric_categories = []
+            for value in categories:
+                try:
+                    numeric_categories.append(float(value))
+                except ValueError:
+                    raise ValueError(
+                        "--categories entry %r is not a number, but the judge "
+                        "column %s holds numeric ratings; state the scale in "
+                        "the same terms as the data"
+                        % (value, data.judge_column)
+                    )
+            categories = numeric_categories
+
         if categories is not None:
             observed = set(data.judge_scores)
             for values in data.human_columns.values():
@@ -102,31 +159,77 @@ def main(argv=None):
                     % (args.labels, exc)
                 )
 
-        text = report.render(
-            data,
-            analysis.agreement_section(
-                data,
-                level=args.level,
-                categories=categories,
-                seed=args.seed,
-                n_resamples=args.resamples,
-            ),
-            analysis.bias_section(
-                data, judge_model=args.judge_model, categories=categories
-            ),
-            analysis.disagreement_clusters(data),
-            analysis.power_section(data, mid=args.mid),
-            title=args.title,
-        )
     except (OSError, ValueError, TypeError) as exc:
         print("calibrate: %s" % exc, file=sys.stderr)
         return 1
 
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    else:
-        print(text)
+    errors = []
+    agreement_result = _run_section(
+        "agreement",
+        lambda: analysis.agreement_section(
+            data,
+            level=args.level,
+            categories=categories,
+            seed=args.seed,
+            n_resamples=args.resamples,
+        ),
+        {
+            "judge_human": {"alpha": None, "ci": None, "n": 0, "why": None},
+            "human_human": None,
+            "ceiling_available": False,
+            "verdict": None,
+            "notes": [],
+        },
+        errors,
+    )
+    bias_result = _run_section(
+        "judge bias",
+        lambda: analysis.bias_section(
+            data, judge_model=args.judge_model, categories=categories
+        ),
+        {"length": None, "self_preference": None, "unavailable": []},
+        errors,
+    )
+    clusters = _run_section(
+        "disagreement clusters",
+        lambda: analysis.disagreement_clusters(data),
+        None,
+        errors,
+    )
+    power_result = _run_section(
+        "statistical power",
+        lambda: analysis.power_section(data, mid=args.mid),
+        {
+            "n": 0,
+            "rows": data.n,
+            "baseline": None,
+            "mde": None,
+            "mid": args.mid,
+            "n_required": None,
+            "sufficient": None,
+        },
+        errors,
+    )
+
+    text = report.render(
+        data,
+        agreement_result,
+        bias_result,
+        clusters,
+        power_result,
+        title=args.title,
+        section_errors=errors,
+    )
+
+    try:
+        if args.out:
+            with open(args.out, "w", encoding="utf-8") as handle:
+                handle.write(text)
+        else:
+            print(text)
+    except OSError as exc:
+        print("calibrate: %s" % exc, file=sys.stderr)
+        return 1
     return 0
 
 

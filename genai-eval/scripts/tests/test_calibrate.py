@@ -4,17 +4,19 @@
 import importlib.util
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-_spec = importlib.util.spec_from_file_location(
-    "calibrate", os.path.join(os.path.dirname(HERE), "calibrate.py")
-)
+CALIBRATE = os.path.join(os.path.dirname(HERE), "calibrate.py")
+
+_spec = importlib.util.spec_from_file_location("calibrate", CALIBRATE)
 calibrate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(calibrate)
 
@@ -29,6 +31,19 @@ ONE_RATER = "judge,human\n1,1\n1,1\n2,2\n2,1\n1,2\n2,2\n"
 WORDS = (
     "judge,human\nlow,low\nmedium,medium\nlow,medium\nhigh,high\n"
     "high,high\nmedium,low\n"
+)
+
+NUMERIC_WITH_LENGTH = (
+    "item_id,human,judge,response_chars\n"
+    "i1,1,1,100\ni2,2,3,300\ni3,3,3,500\n"
+    "i4,1,2,200\ni5,2,2,250\ni6,3,3,520\n"
+)
+
+BLANK_JUDGE_CELL = NUMERIC_WITH_LENGTH.replace("i3,3,3,500", "i3,3,,500")
+BLANK_HUMAN_CELL = NUMERIC_WITH_LENGTH.replace("i3,3,3,500", "i3,,3,500")
+BLANK_LENGTH_COLUMN = (
+    "item_id,human,judge,response_chars\n"
+    "i1,1,1,\ni2,2,3,\ni3,3,3,\ni4,1,2,\ni5,2,2,\ni6,3,3,\n"
 )
 
 
@@ -148,6 +163,127 @@ class TestErrors(unittest.TestCase):
         )
         self.assertEqual(code, 0, err)
         self.assertIn("Judge-human agreement", out)
+
+
+class TestBlankCells(unittest.TestCase):
+    """A blank cell is missing data everywhere else in this pipeline.
+
+    The loader deliberately produces None for one, disagreement_clusters skips
+    those rows and the agreement statistic pools around them. The length probe
+    used to hand them to a sort, which raised and left the user with an exit
+    code, no report, and a message naming neither the column nor the flag.
+    """
+
+    def report_for(self, csv_text):
+        code, out, err = run(
+            [write_csv(csv_text), "--seed", "1", "--resamples", "200"]
+        )
+        self.assertEqual(code, 0, err)
+        self.assertIn("Judge-human agreement", out)
+        return out
+
+    def test_a_blank_judge_cell_still_produces_a_report(self):
+        out = self.report_for(BLANK_JUDGE_CELL)
+        self.assertIn("Length: judge rho", out)
+
+    def test_a_blank_human_cell_still_produces_a_report(self):
+        out = self.report_for(BLANK_HUMAN_CELL)
+        self.assertIn("Length: judge rho", out)
+
+    def test_a_wholly_blank_length_column_is_named_not_fatal(self):
+        """An empty column coerces to numeric vacuously, so nothing upstream
+        rejects it."""
+        out = self.report_for(BLANK_LENGTH_COLUMN)
+        self.assertIn("Not measured", out)
+        self.assertIn("Length bias", out)
+
+
+class TestOneSectionFailingKeepsTheRest(unittest.TestCase):
+    """Report what you can, name what you cannot - including of itself."""
+
+    def test_a_failing_probe_does_not_erase_the_other_sections(self):
+        with mock.patch.object(
+            calibrate.analysis, "bias_section", side_effect=RuntimeError("boom")
+        ):
+            code, out, err = run(
+                [write_csv(TWO_RATER), "--seed", "1", "--resamples", "200"]
+            )
+        self.assertEqual(code, 0, err)
+        self.assertIn("Judge-human agreement", out)
+        self.assertIn("Human-human agreement", out)
+        self.assertIn("Disagreement clusters", out)
+        self.assertIn("judge bias section could not be computed", out)
+        self.assertIn("boom", out)
+
+    def test_a_failing_cluster_count_is_not_reported_as_agreement(self):
+        """An empty cluster list means the judge and the human never
+        disagreed. A section that could not run must not borrow that
+        sentence."""
+        with mock.patch.object(
+            calibrate.analysis,
+            "disagreement_clusters",
+            side_effect=RuntimeError("boom"),
+        ):
+            code, out, err = run(
+                [write_csv(TWO_RATER), "--seed", "1", "--resamples", "200"]
+            )
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("never disagreed", out)
+        self.assertIn("disagreement clusters section could not be computed", out)
+
+    def test_a_user_error_still_exits_one_before_any_section_runs(self):
+        code, out, err = run(["/nonexistent/labels.csv"])
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("calibrate:", err)
+
+
+class TestNumericCategories(unittest.TestCase):
+    def test_numbers_are_accepted_for_a_numeric_rubric(self):
+        """The most common scale shape there is. The loader coerces the column
+        to floats, so a scale stated as text covers none of its ratings."""
+        code, out, err = run(
+            [
+                write_csv(NUMERIC_WITH_LENGTH),
+                "--level", "ordinal",
+                "--categories", "1,2,3",
+                "--seed", "1",
+                "--resamples", "200",
+            ]
+        )
+        self.assertEqual(code, 0, err)
+        self.assertIn("Judge-human agreement", out)
+
+    def test_a_non_numeric_entry_against_a_numeric_column_is_named(self):
+        code, _, err = run(
+            [
+                write_csv(NUMERIC_WITH_LENGTH),
+                "--level", "ordinal",
+                "--categories", "1,2,three",
+                "--seed", "1",
+            ]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("three", err)
+
+
+class TestConsoleEncoding(unittest.TestCase):
+    def test_a_legacy_codepage_degrades_a_character_not_the_report(self):
+        """The report carries an em dash, which cp437 cannot encode. Printing
+        it used to raise UnicodeEncodeError and lose the whole report; the
+        error handler alone turns that into a "?"."""
+        path = write_csv(ONE_RATER)
+        environment = dict(os.environ, PYTHONIOENCODING="cp437")
+        finished = subprocess.run(
+            [sys.executable, CALIBRATE, path, "--seed", "1", "--resamples", "200"],
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(finished.returncode, 0, finished.stderr.decode("utf-8", "replace"))
+        self.assertIn(
+            "Judge-human agreement", finished.stdout.decode("cp437", "replace")
+        )
 
 
 class TestMid(unittest.TestCase):
