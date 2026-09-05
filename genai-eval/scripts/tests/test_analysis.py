@@ -203,5 +203,46 @@ class TestBiasSection(unittest.TestCase):
         self.assertIsNone(result["length"]["gap"])
 
 
+class TestDisagreementClusters(unittest.TestCase):
+    def test_known_counts_and_ordering(self):
+        """Six items. The judge says 5 where the human said 3 three times, and
+        3 where the human said 5 once; two items agree. So there are two
+        clusters of sizes 3 and 1, shares 0.75 and 0.25, biggest first."""
+        data = make_data(
+            [5, 5, 5, 3, 4, 2],
+            {"human": [3, 3, 3, 5, 4, 2]},
+            item_ids=["i1", "i2", "i3", "i4", "i5", "i6"],
+        )
+        clusters = analysis.disagreement_clusters(data)
+        self.assertEqual(len(clusters), 2)
+        self.assertEqual(clusters[0]["human"], 3)
+        self.assertEqual(clusters[0]["judge"], 5)
+        self.assertEqual(clusters[0]["count"], 3)
+        self.assertEqual(clusters[0]["item_ids"], ["i1", "i2", "i3"])
+        self.assertAlmostEqual(clusters[0]["share"], 0.75, places=10)
+        self.assertEqual(clusters[1]["count"], 1)
+        self.assertAlmostEqual(clusters[1]["share"], 0.25, places=10)
+
+    def test_perfect_agreement_gives_no_clusters(self):
+        data = make_data([1, 2, 3], {"human": [1, 2, 3]})
+        self.assertEqual(analysis.disagreement_clusters(data), [])
+
+    def test_missing_item_ids_leave_the_list_empty_not_absent(self):
+        data = make_data([5, 3], {"human": [3, 5]})
+        clusters = analysis.disagreement_clusters(data)
+        self.assertEqual(clusters[0]["item_ids"], [])
+
+    def test_rows_with_a_missing_rating_are_skipped(self):
+        """A blank cell is not a disagreement."""
+        data = make_data([5, 5], {"human": [3, None]})
+        clusters = analysis.disagreement_clusters(data)
+        self.assertEqual(len(clusters), 1)
+        self.assertEqual(clusters[0]["count"], 1)
+
+    def test_limit_truncates_the_tail(self):
+        data = make_data([5, 5, 4, 3], {"human": [1, 1, 1, 1]})
+        self.assertEqual(len(analysis.disagreement_clusters(data, limit=1)), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

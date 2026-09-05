@@ -157,3 +157,42 @@ def bias_section(data, judge_model=None):
         "self_preference": preference,
         "unavailable": unavailable,
     }
+
+
+def disagreement_clusters(data, limit=None):
+    """Count which (human label, judge label) pairs disagree, and how often.
+
+    This is the observed half of a failure taxonomy. It does not name the
+    categories — that needs someone who understands the rubric, and a name
+    invented here would be a guess dressed as a finding. The skill reads these
+    counts and supplies the names.
+
+    Rows where either rating is missing are skipped: a blank cell is not a
+    disagreement. Pairs are keyed on the first human rater column, which is the
+    one a single-rater file has.
+    """
+    human_name = next(iter(data.human_columns))
+    human = data.human_columns[human_name]
+    judge = data.judge_scores
+
+    buckets = {}
+    for row in range(data.n):
+        h, j = human[row], judge[row]
+        if h is None or j is None or h == j:
+            continue
+        entry = buckets.setdefault((h, j), [])
+        entry.append(data.item_ids[row] if data.item_ids else None)
+
+    total = sum(len(ids) for ids in buckets.values())
+    clusters = [
+        {
+            "human": h,
+            "judge": j,
+            "count": len(ids),
+            "item_ids": [i for i in ids if i is not None],
+            "share": len(ids) / total,
+        }
+        for (h, j), ids in buckets.items()
+    ]
+    clusters.sort(key=lambda c: (-c["count"], str(c["human"]), str(c["judge"])))
+    return clusters[:limit] if limit else clusters
