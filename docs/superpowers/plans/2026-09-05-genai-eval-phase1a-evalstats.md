@@ -1595,7 +1595,7 @@ def dimensionality(matrix):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python3 genai-eval/scripts/tests/test_items.py`
-Expected: PASS — `Ran 23 tests ... OK`
+Expected: PASS — `Ran 26 tests ... OK`
 
 - [ ] **Step 5: Commit**
 
