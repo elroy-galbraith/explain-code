@@ -48,14 +48,22 @@ def cohens_kappa(a, b):
 def weighted_kappa(a, b, weights="linear"):
     """Weighted kappa for two raters on an ordinal scale.
 
-    Most rubrics are ordinal (1-5, or fail/weak/adequate/strong), and unweighted
-    kappa treats a 4-vs-5 disagreement as harshly as a 1-vs-5. Weighted kappa
-    gives partial credit for near-misses.
+    Most rubrics are ordinal (1-5, or 1/2/3/4 for fail/weak/adequate/strong),
+    and unweighted kappa treats a 4-vs-5 disagreement as harshly as a 1-vs-5.
+    Weighted kappa gives partial credit for near-misses.
 
     Categories are ordered by natural sort, so all labels must be mutually
     comparable. `weights` is "linear" (credit falls off with distance) or
     "quadratic" (credit falls off with squared distance, so near-misses are
     forgiven more and far-misses punished about the same).
+
+    CAVEAT — scale order comes from sort order, not meaning. This function has
+    no idea which category is "worse"; it only knows how the values sort. Feed
+    it ordered numbers (1, 2, 3, 4) or ordered single letters (a, b, c, d) so
+    that natural sort matches rubric order. Word labels sort alphabetically:
+    sorted({"fail", "weak", "adequate", "strong"}) puts "adequate" first and
+    "weak" last, which is not the rubric's order, and the function will return
+    a confident, wrong number with no warning.
 
     Raises ValueError on length mismatch, empty input, fewer than two distinct
     categories, or an unknown weighting.

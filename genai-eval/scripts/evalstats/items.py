@@ -1,10 +1,21 @@
-"""Classical test theory for eval item pools.
+"""Classical test theory, and the matrix algebra behind it, for eval item pools.
 
 An eval is a test, and a test made of items nobody gets wrong measures nothing.
-These functions answer the two questions Step 7 of the SOP asks: how hard is
-each item, and does it separate stronger systems from weaker ones?
+This module has two halves.
 
-All functions take binary responses (1 = passed the item, 0 = failed).
+The classical-test-theory half — `item_difficulty`, `point_biserial`,
+`flag_items`, `kr20` — answers the two questions Step 7 of the SOP asks: how
+hard is each item, and does it separate stronger systems from weaker ones?
+These functions take binary responses (1 = passed the item, 0 = failed) and a
+response matrix of one row per respondent, one column per item.
+
+The matrix-algebra half — `correlation_matrix`, `eigenvalues_symmetric`,
+`dimensionality` — supports Step 8's structural-validity check: do the items
+behave like measurements of one thing? These functions take and return
+matrices of floats (a correlation matrix or a general symmetric matrix), not
+binary responses; `dimensionality` is the bridge, taking the same binary
+response matrix as the first half and running it through `correlation_matrix`
+and `eigenvalues_symmetric` to produce a scree summary.
 """
 
 import math
@@ -38,6 +49,16 @@ def point_biserial(responses, totals):
 
     Returns None rather than a number when the correlation is undefined: every
     response identical, or no variance in total scores.
+
+    This is the uncorrected, item-total form: each item's own response is part
+    of the `totals` it is being correlated against, rather than the
+    corrected rest-score form that removes the item's own contribution first.
+    Including the item in its own total inflates the correlation, and the
+    inflation grows as the item count falls — it is largest on short pools,
+    where a single item is a bigger share of the total. A caller who wants the
+    corrected rest-score correlation should pass `totals` computed with each
+    item's own contribution already subtracted out; this function does not do
+    that subtraction itself.
     """
     if len(responses) != len(totals):
         raise ValueError("responses and totals must be the same length")

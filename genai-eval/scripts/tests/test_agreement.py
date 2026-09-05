@@ -406,6 +406,13 @@ class TestBootstrapCI(unittest.TestCase):
 
         Truncation biases the interval outward at the low end, which is the
         conservative direction for a confidence interval.
+
+        The pinned values (4.0 and 95.0) document current behaviour, not a
+        desired invariant: they are an artefact of how int() truncation
+        interacts with binary floating point at this particular confidence and
+        n_resamples. A future change to round rather than truncate would
+        legitimately change these numbers, and this test would need updating
+        to match rather than being treated as a regression.
         """
         calls = []
 

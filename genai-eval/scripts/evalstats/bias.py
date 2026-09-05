@@ -147,7 +147,7 @@ def prompt_sensitivity(variant_scores):
     items in the same order.
 
     Two numbers, because they fail differently. mean_pairwise_rho near 1.0 means
-    the *ranking* survives rewording. mean_spread is the largest gap between any
+    the *ranking* survives rewording. mean_range is the largest gap between any
     two variants' mean scores, which catches a rubric that preserves the ranking
     while shifting every score up — harmless for a comparison, fatal for an
     absolute threshold.
@@ -168,6 +168,6 @@ def prompt_sensitivity(variant_scores):
     means = [statistics.mean(v) for v in variant_scores]
     return {
         "mean_pairwise_rho": statistics.mean(correlations) if correlations else None,
-        "mean_spread": max(means) - min(means),
+        "mean_range": max(means) - min(means),
         "n_variants": len(variant_scores),
     }

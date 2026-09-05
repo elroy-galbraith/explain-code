@@ -81,9 +81,17 @@ class TestSaturationReport(unittest.TestCase):
         self.assertFalse(report["saturated"])
 
     def test_pool_at_the_threshold_is_saturated(self):
-        scores = [5] * 19 + [4]  # 0.95 at ceiling
+        """An exact tie against the default threshold, not merely above it.
+
+        [5]*9 + [4] gives a ceiling proportion of exactly 0.9 — the same double
+        as the default ceiling_threshold of 0.90, so the comparison is exact
+        rather than approximate. Only this tie distinguishes `>=` from `>`; the
+        previous fixture (0.95 against 0.90) would pass under either operator
+        and so never tested the name of this test.
+        """
+        scores = [5] * 9 + [4]  # 0.9 at ceiling
         report = saturation.saturation_report(scores, max_score=5)
-        self.assertAlmostEqual(report["ceiling_proportion"], 0.95, places=10)
+        self.assertAlmostEqual(report["ceiling_proportion"], 0.9, places=10)
         self.assertTrue(report["saturated"])
 
     def test_threshold_is_configurable(self):

@@ -264,7 +264,7 @@ eval-design  --writes-->  eval-card.json (status: draft -> designed -> sealed)
                           [ run the eval ]
                               |
 eval-qualify --reads--->  eval-card.json + results/labels
-             --runs---->  evalstats.py   (Gates 6, 7, 10, 11)
+             --runs---->  evalstats/     (Gates 6, 7, 10, 11)
              --appends->  qualification block
                               |
                     render_eval_card.py --> Eval Card (markdown)
@@ -272,7 +272,7 @@ eval-qualify --reads--->  eval-card.json + results/labels
                     optional: improvement-plan / STE for stakeholder versions
 ```
 
-Bare mode short-circuits this: `labels.csv -> evalstats.py -> calibration
+Bare mode short-circuits this: `labels.csv -> evalstats/ -> calibration
 report`, with no card at any point.
 
 ## 6. Error handling
@@ -364,7 +364,7 @@ coherent: the eval plugin measures, the existing plugins explain.
 
 ## 10. Phasing
 
-1. **Phase 1** — plugin skeleton, `evalstats.py` with its known-answer tests,
+1. **Phase 1** — plugin skeleton, `evalstats/` with its known-answer tests,
    `eval-qualify` in bare mode, the `examples/judge-calibration/` worked
    example, and the `genai-eval-tests.yml` workflow. Independently useful and
    shippable alone.
@@ -402,7 +402,7 @@ premise is measurement rigour cannot ship a bibliography taken on trust.
 
 - **Item Response Theory and factor analysis.** The correct statistics for Steps
   7 and 8, but they need numpy/scipy and would break the stdlib-only rule every
-  plugin here follows. `evalstats.py` provides classical test theory plus an
+  plugin here follows. `evalstats/` provides classical test theory plus an
   eigenvalue scree, and `item-analysis.md` says plainly where that stops.
 - **Running evals.** These skills design and qualify instruments; they do not
   execute model calls, host a harness, or manage sandboxes.

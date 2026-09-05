@@ -85,10 +85,23 @@ class TestPointBiserial(unittest.TestCase):
 
 class TestFlagItems(unittest.TestCase):
     def test_guttman_items_are_all_clean(self):
+        """Checking that flags are empty is not enough on its own: it would
+        pass even if difficulty or discrimination were computed wrong, as long
+        as neither happened to cross a flag threshold. Item 1 (index 1) is
+        pinned to the same known answers TestPointBiserial derives directly:
+        difficulty 0.6 from its column pass rate (3 of 5), and discrimination
+        sqrt(3)/2 from test_known_answer_item_two's point-biserial derivation.
+        """
+        import math
+
         report = items.flag_items(GUTTMAN)
         self.assertEqual(len(report), 4)
         for row in report:
             self.assertEqual(row["flags"], [])
+        self.assertAlmostEqual(report[1]["difficulty"], 0.6, places=10)
+        self.assertAlmostEqual(
+            report[1]["discrimination"], math.sqrt(3) / 2, places=10
+        )
 
     def test_flags_a_mis_keyed_item(self):
         matrix = [row[:] for row in GUTTMAN]
@@ -235,7 +248,29 @@ class TestDimensionality(unittest.TestCase):
         values = items.dimensionality(GUTTMAN)["eigenvalues"]
         self.assertEqual(values, sorted(values, reverse=True))
 
+    def test_first_ratio_known_answer_two_item_submatrix(self):
+        """A genuine known answer for first_ratio, not the implementation
+        checked against itself.
+
+        The two-column Guttman submatrix (items 0 and 1) has correlation
+        r = sqrt(6)/4, per TestCorrelationMatrix.test_known_answer_two_items.
+        Its 2x2 correlation matrix [[1, r], [r, 1]] has eigenvalues 1+r and
+        1-r (TestEigenvalues.test_two_by_two_known_answer confirms the
+        general form), which sum to 2. So first_ratio, the largest eigenvalue
+        over the sum, is (1 + sqrt(6)/4) / 2.
+        """
+        import math
+
+        r = math.sqrt(6) / 4
+        submatrix = [[row[0], row[1]] for row in GUTTMAN]
+        result = items.dimensionality(submatrix)
+        self.assertAlmostEqual(result["first_ratio"], (1 + r) / 2, places=9)
+
     def test_summary_fields_agree_with_the_eigenvalues(self):
+        """Self-consistency check: still worth having as a guard against the
+        summary fields drifting from the eigenvalues they are derived from,
+        but not sufficient on its own since it can only ever pass — see
+        test_first_ratio_known_answer_two_item_submatrix for a real answer."""
         result = items.dimensionality(GUTTMAN)
         values = result["eigenvalues"]
         self.assertAlmostEqual(

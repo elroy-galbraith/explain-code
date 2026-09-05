@@ -145,7 +145,7 @@ class TestPromptSensitivity(unittest.TestCase):
         variants = [[1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4]]
         result = bias.prompt_sensitivity(variants)
         self.assertAlmostEqual(result["mean_pairwise_rho"], 1.0, places=10)
-        self.assertAlmostEqual(result["mean_spread"], 0.0, places=10)
+        self.assertAlmostEqual(result["mean_range"], 0.0, places=10)
         self.assertEqual(result["n_variants"], 3)
 
     def test_reworded_rubric_that_flips_the_ranking(self):
@@ -157,7 +157,7 @@ class TestPromptSensitivity(unittest.TestCase):
         variants = [[1, 2, 3, 4], [2, 3, 4, 5]]
         result = bias.prompt_sensitivity(variants)
         self.assertAlmostEqual(result["mean_pairwise_rho"], 1.0, places=10)
-        self.assertAlmostEqual(result["mean_spread"], 1.0, places=10)
+        self.assertAlmostEqual(result["mean_range"], 1.0, places=10)
 
     def test_single_variant_raises(self):
         with self.assertRaises(ValueError):
