@@ -538,6 +538,25 @@ class TestExplicitCategories(unittest.TestCase):
                 ["bad", "surprise"], ["bad", "bad"], categories=self.ORDER
             )
 
+    def test_a_repeated_category_is_rejected_by_name(self):
+        """A trailing paste-typo. The index built from the list keeps only the
+        last position, so ["bad", "fine", "excellent", "bad"] silently makes
+        "bad" the top of the scale: the fixture pinned at 0.79 above comes back
+        0.417 instead, with no warning."""
+        with self.assertRaises(ValueError) as caught:
+            agreement.krippendorff_alpha(
+                self.WORDS, level="ordinal", categories=self.ORDER + ["bad"]
+            )
+        self.assertIn("bad", str(caught.exception))
+
+    def test_weighted_kappa_rejects_a_repeated_category_too(self):
+        """Both callers share one validator, so neither can drift from it."""
+        with self.assertRaises(ValueError) as caught:
+            agreement.weighted_kappa(
+                ["bad", "fine"], ["bad", "bad"], categories=self.ORDER + ["fine"]
+            )
+        self.assertIn("fine", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

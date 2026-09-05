@@ -119,6 +119,21 @@ class TestErrors(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertTrue(err.strip())
 
+    def test_repeated_category_exits_one_and_names_the_repeat(self):
+        """low,medium,high,low returns 0.417 where the correct order returns
+        0.790, because the index keeps a duplicate's last position. A trailing
+        paste-typo must not silently invert the scale."""
+        code, _, err = run(
+            [
+                write_csv(WORDS),
+                "--level", "ordinal",
+                "--categories", "low,medium,high,low",
+                "--seed", "1",
+            ]
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("low", err)
+
     def test_complete_categories_are_accepted(self):
         """The guard must reject only genuinely uncovered ratings — naming the
         full scale has to still work, or the check would block correct use."""

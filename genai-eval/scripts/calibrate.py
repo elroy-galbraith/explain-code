@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from calibration import analysis, loader, report
+from evalstats import agreement
 
 
 def main(argv=None):
@@ -89,14 +90,16 @@ def main(argv=None):
             for values in data.human_columns.values():
                 observed.update(values)
             observed.discard(None)
-            unknown = observed - set(categories)
-            if unknown:
+            try:
+                agreement.scale_order(categories, observed)
+            except ValueError as exc:
                 raise ValueError(
-                    "--categories does not cover every rating in %s: %s. An "
-                    "incomplete scale makes the agreement figure come back "
-                    "undefined, which reads as a problem with your data rather "
-                    "than with your command."
-                    % (args.labels, ", ".join(sorted(str(v) for v in unknown)))
+                    "--categories does not describe the ratings in %s: %s. A "
+                    "scale that omits a rating makes the agreement figure come "
+                    "back undefined, and one that repeats a value quietly "
+                    "ranks the earlier position wrong; both read as a problem "
+                    "with your data rather than with your command."
+                    % (args.labels, exc)
                 )
 
         text = report.render(

@@ -9,6 +9,46 @@ good judge, and only a chance-corrected statistic shows that.
 import random
 
 
+def scale_order(categories, observed):
+    """The stated scale order, checked against the ratings actually present.
+
+    Shared by every statistic that accepts a `categories` argument, because
+    each of them builds the same index from it and each of them is wrong in
+    the same two ways without these checks.
+
+    A repeated value is rejected by name. The index built from the list keeps
+    only a duplicate's last position, so `low,medium,high,low` silently makes
+    `low` the top of the scale — a trailing paste-typo that returns a
+    plausible number rather than an error.
+
+    A rating outside the list is rejected too: there is no position on the
+    stated scale to give it, and guessing one is how a confident wrong answer
+    gets made.
+    """
+    scale = list(categories)
+
+    seen = set()
+    repeated = []
+    for value in scale:
+        if value in seen and value not in repeated:
+            repeated.append(value)
+        seen.add(value)
+    if repeated:
+        raise ValueError(
+            "categories repeats %s; a repeated value takes its last position "
+            "in the scale order, which silently ranks the earlier one wrong"
+            % ", ".join(str(v) for v in repeated)
+        )
+
+    unknown = set(observed) - seen
+    if unknown:
+        raise ValueError(
+            "ratings not present in the supplied categories: %s"
+            % ", ".join(sorted(str(v) for v in unknown))
+        )
+    return scale
+
+
 def cohens_kappa(a, b):
     """Cohen's kappa for two raters on nominal categories.
 
@@ -82,13 +122,7 @@ def weighted_kappa(a, b, weights="linear", categories=None):
     if categories is None:
         scale = sorted(observed)
     else:
-        scale = list(categories)
-        unknown = observed - set(scale)
-        if unknown:
-            raise ValueError(
-                "ratings not present in the supplied categories: %s"
-                % ", ".join(sorted(str(v) for v in unknown))
-            )
+        scale = scale_order(categories, observed)
     k = len(scale)
     if k < 2:
         raise ValueError(
@@ -178,9 +212,9 @@ def _coincidence(units, categories=None):
     ratings that unit actually has. That weighting is what lets units with
     different numbers of raters sit in the same matrix.
 
-    `categories`, when given, is the authoritative scale order; any observed
-    rating outside it raises ValueError. When None, order comes from
-    sorting the observed values, as before.
+    `categories`, when given, is the authoritative scale order; a repeated
+    value in it, or any observed rating outside it, raises ValueError. When
+    None, order comes from sorting the observed values, as before.
     """
     present = [[v for v in unit if v is not None] for unit in units]
     pairable = [unit for unit in present if len(unit) >= 2]
@@ -193,13 +227,7 @@ def _coincidence(units, categories=None):
     if categories is None:
         values = sorted(observed)
     else:
-        values = list(categories)
-        unknown = observed - set(values)
-        if unknown:
-            raise ValueError(
-                "ratings not present in the supplied categories: %s"
-                % ", ".join(sorted(str(v) for v in unknown))
-            )
+        values = scale_order(categories, observed)
     index = {v: i for i, v in enumerate(values)}
     k = len(values)
 
