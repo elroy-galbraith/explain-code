@@ -244,5 +244,58 @@ class TestDisagreementClusters(unittest.TestCase):
         self.assertEqual(len(analysis.disagreement_clusters(data, limit=1)), 1)
 
 
+class TestPowerSection(unittest.TestCase):
+    def test_baseline_defaults_to_observed_exact_agreement(self):
+        """Judge matches the human on 3 of 4 rows, so the baseline is 0.75."""
+        data = make_data([1, 2, 3, 9], {"human": [1, 2, 3, 4]})
+        result = analysis.power_section(data)
+        self.assertAlmostEqual(result["baseline"], 0.75, places=10)
+        self.assertEqual(result["n"], 4)
+
+    def test_known_answer_for_required_n(self):
+        """Detecting 0.80 vs 0.85 needs 903 items per group at the default
+        alpha and power — the value the power suite pins at 902.62 before
+        ceiling."""
+        data = make_data([1] * 10, {"human": [1] * 10})
+        result = analysis.power_section(data, mid=0.05, baseline=0.80)
+        self.assertEqual(result["n_required"], 903)
+
+    def test_a_small_set_is_reported_insufficient(self):
+        data = make_data([1] * 20, {"human": [1] * 20})
+        result = analysis.power_section(data, mid=0.05, baseline=0.80)
+        self.assertFalse(result["sufficient"])
+
+    def test_a_large_set_is_reported_sufficient(self):
+        data = make_data([1] * 1000, {"human": [1] * 1000})
+        result = analysis.power_section(data, mid=0.05, baseline=0.80)
+        self.assertTrue(result["sufficient"])
+
+    def test_no_mid_leaves_sufficiency_unanswered(self):
+        """Without a stated minimum interesting difference there is no question
+        to answer, and inventing one would be worse than saying so."""
+        data = make_data([1] * 50, {"human": [1] * 50})
+        result = analysis.power_section(data, baseline=0.80)
+        self.assertIsNone(result["mid"])
+        self.assertIsNone(result["sufficient"])
+
+    def test_tiny_sample_detects_nothing(self):
+        """Three items, observed agreement 2/3. No proportion below 1.0 is
+        detectable against that baseline at n = 3, so mde is None — the honest
+        answer, and far more useful than a number."""
+        data = make_data([1, 1, 2], {"human": [1, 2, 2]})
+        result = analysis.power_section(data)
+        self.assertAlmostEqual(result["baseline"], 2 / 3, places=10)
+        self.assertIsNone(result["mde"])
+
+    def test_a_saturated_baseline_is_out_of_range_not_detectable(self):
+        """Every row agreeing gives a baseline of 1.0, which the two-proportion
+        formula cannot take. Report nothing rather than a number from a
+        degenerate input."""
+        data = make_data([1] * 3, {"human": [1] * 3})
+        result = analysis.power_section(data)
+        self.assertAlmostEqual(result["baseline"], 1.0, places=10)
+        self.assertIsNone(result["mde"])
+
+
 if __name__ == "__main__":
     unittest.main()

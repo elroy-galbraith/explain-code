@@ -10,10 +10,11 @@ reader assume it passed a bar that was never measured.
 
 import sys
 import os
+import math
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evalstats import agreement, bias
+from evalstats import agreement, bias, power
 
 
 def _alpha_with_ci(units, level, categories, seed, n_resamples):
@@ -196,3 +197,51 @@ def disagreement_clusters(data, limit=None):
     ]
     clusters.sort(key=lambda c: (-c["count"], str(c["human"]), str(c["judge"])))
     return clusters[:limit] if limit else clusters
+
+
+def power_section(data, mid=None, baseline=None):
+    """Can this many items detect the difference you would act on?
+
+    `mid` is the minimum interesting difference in proportion terms — the
+    smallest change in judge-human exact agreement that would change a
+    decision. Without one there is no sufficiency question to answer, and
+    guessing a value would produce a verdict nobody asked for.
+
+    `baseline` defaults to the observed exact-agreement rate.
+    """
+    human_name = next(iter(data.human_columns))
+    human = data.human_columns[human_name]
+
+    if baseline is None:
+        comparable = [
+            (h, j)
+            for h, j in zip(human, data.judge_scores)
+            if h is not None and j is not None
+        ]
+        baseline = (
+            sum(1 for h, j in comparable if h == j) / len(comparable)
+            if comparable
+            else None
+        )
+
+    result = {
+        "n": data.n,
+        "baseline": baseline,
+        "mde": None,
+        "mid": mid,
+        "n_required": None,
+        "sufficient": None,
+    }
+    if baseline is None or not 0.0 < baseline < 1.0:
+        return result
+
+    result["mde"] = power.mde_two_proportion(data.n, baseline)
+
+    if mid is not None:
+        target = min(baseline + mid, 1.0 - 1e-9)
+        result["n_required"] = math.ceil(
+            power.n_required_two_proportion(baseline, target)
+        )
+        result["sufficient"] = data.n >= result["n_required"]
+
+    return result
