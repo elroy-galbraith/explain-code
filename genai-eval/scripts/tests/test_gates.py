@@ -107,6 +107,41 @@ class TestGate3Falsifiable(unittest.TestCase):
         self.assertEqual(len(findings), 2)
 
 
+class TestGatesNeverRaise(unittest.TestCase):
+    """The module's contract: a gate returns findings, it does not raise.
+
+    The loader reports a malformed block, but it returns findings rather than
+    raising, so a caller can still reach a gate with a card it has already
+    complained about. A gate that crashed there would take down the whole
+    report — and the CLI catches only ValueError, so an AttributeError would
+    escape entirely.
+    """
+
+    def test_gate_1_survives_a_non_object_decision(self):
+        findings = gates.gate_1_decision({"decision": "oops"})
+        self.assertTrue(findings)
+        self.assertTrue(all(f.gate == 1 for f in findings))
+
+    def test_gate_1_survives_a_non_object_outcome_entry(self):
+        card = base_card()
+        card["decision"]["outcomes"].append("not-an-outcome")
+        findings = gates.gate_1_decision(card)
+        self.assertTrue(findings)
+
+    def test_gate_3_survives_a_non_object_construct(self):
+        findings = gates.gate_3_falsifiable({"constructs": ["typo"]})
+        self.assertEqual(findings, [])
+
+    def test_gate_3_still_reports_a_real_construct_beside_a_malformed_one(self):
+        """Skipping what it cannot read must not mean skipping what it can."""
+        card = base_card()
+        card["constructs"][0]["negative_evidence"] = []
+        card["constructs"].append("typo")
+        findings = gates.gate_3_falsifiable(card)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "constructs[0].negative_evidence")
+
+
 class TestGatesDoNotBleed(unittest.TestCase):
     def test_breaking_gate_1_leaves_gate_3_silent(self):
         """Each gate answers its own question. A card broken in one place

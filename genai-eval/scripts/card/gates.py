@@ -23,6 +23,18 @@ def _nonempty_strings(value):
     )
 
 
+def _objects(value):
+    """The dict entries of a list, ignoring anything else.
+
+    The loader reports a non-object entry as a structural finding, but it
+    returns findings rather than raising, so a caller may still run the gates
+    over a card it has already complained about. A gate that crashed there
+    would take the whole report down with it — and this module's contract is
+    that a gate never raises.
+    """
+    return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
+
+
 def gate_1_decision(card):
     """Gate 1: is there a named decision-owner and an action for every outcome?
 
@@ -31,7 +43,8 @@ def gate_1_decision(card):
     of its results.
     """
     findings = []
-    decision = card.get("decision") or {}
+    raw_decision = card.get("decision")
+    decision = raw_decision if isinstance(raw_decision, dict) else {}
 
     if _blank(decision.get("owner")):
         findings.append(Finding(
@@ -41,7 +54,7 @@ def gate_1_decision(card):
         ))
 
     outcomes = decision.get("outcomes") or []
-    seen = {o.get("result") for o in outcomes if isinstance(o, dict)}
+    seen = {o.get("result") for o in _objects(outcomes)}
     for required in REQUIRED_OUTCOMES:
         if required not in seen:
             findings.append(Finding(
@@ -71,6 +84,8 @@ def gate_3_falsifiable(card):
     """
     findings = []
     for index, construct in enumerate(card.get("constructs") or []):
+        if not isinstance(construct, dict):
+            continue
         if not _nonempty_strings(construct.get("negative_evidence")):
             findings.append(Finding(
                 "error", "constructs[%d].negative_evidence" % index,

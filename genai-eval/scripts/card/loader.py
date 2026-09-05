@@ -26,6 +26,15 @@ REQUIRED_BLOCKS = (
 # times). A card with none of these describes no evaluation at all.
 NON_EMPTY_BLOCKS = ("constructs", "claims")
 
+# Blocks that must be an object, and blocks that must be a list of objects. A
+# hand-edited card can put a string or a number where a block belongs; without
+# this check that value reaches the gates, which assume `.get()` works on
+# every entry and are not required to guard against it (see gates.py's
+# module docstring: a gate reports, it does not raise — but that contract is
+# about findings, not about being handed the wrong shape entirely).
+OBJECT_BLOCKS = ("decision", "domain", "items", "grader", "preregistration")
+LIST_OF_OBJECT_BLOCKS = ("constructs", "claims", "evidence_model", "task_model")
+
 
 @dataclass
 class Finding:
@@ -83,6 +92,31 @@ def load_card(path):
                 "evaluation, and the gates that read this block would pass "
                 "over it vacuously — their checks iterate this list." % block,
             ))
+
+    for block in OBJECT_BLOCKS:
+        value = card.get(block)
+        if value is not None and not isinstance(value, dict):
+            findings.append(Finding(
+                "error", block,
+                "expected an object, found %s" % type(value).__name__,
+            ))
+
+    for block in LIST_OF_OBJECT_BLOCKS:
+        value = card.get(block)
+        if value is None:
+            continue
+        if not isinstance(value, list):
+            findings.append(Finding(
+                "error", block,
+                "expected a list, found %s" % type(value).__name__,
+            ))
+            continue
+        for index, entry in enumerate(value):
+            if not isinstance(entry, dict):
+                findings.append(Finding(
+                    "error", "%s[%d]" % (block, index),
+                    "expected an object, found %s" % type(entry).__name__,
+                ))
 
     version = card.get("schema_version")
     if version is not None and version not in SCHEMA_VERSIONS:

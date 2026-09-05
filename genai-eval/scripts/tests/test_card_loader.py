@@ -64,6 +64,20 @@ class TestStructuralFindings(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].path, "status")
 
+    def test_a_non_object_block_is_reported(self):
+        findings = self._findings(lambda c: c.update(decision="oops"))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "decision")
+
+    def test_a_non_object_entry_in_a_list_block_is_reported_with_its_index(self):
+        """The index must address the card as written, so a reader can find
+        the offending entry without counting past the valid ones."""
+        findings = self._findings(
+            lambda c: c.update(constructs=[c["constructs"][0], "typo"]))
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].path, "constructs[1]")
+        self.assertIsNone(findings[0].gate)
+
     def test_an_empty_constructs_array_is_reported(self):
         """Gates 2 and 3 iterate constructs, so an empty array would pass them
         vacuously. Presence is not enough — the block has to have content."""
