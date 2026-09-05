@@ -13,7 +13,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from evalstats import agreement
+from evalstats import agreement, bias
 
 
 def _alpha_with_ci(units, level, categories, seed, n_resamples):
@@ -113,4 +113,47 @@ def agreement_section(data, level="nominal", categories=None, seed=None,
         "ceiling_available": human_human["alpha"] is not None,
         "verdict": verdict,
         "notes": notes,
+    }
+
+
+def bias_section(data, judge_model=None):
+    """Whichever judge bias probes the available columns support.
+
+    Each probe that cannot run is named in `unavailable` together with what it
+    would need. A silently skipped probe reads as a probe that found nothing.
+    """
+    unavailable = []
+
+    length = None
+    if data.lengths is None:
+        unavailable.append(
+            "Length bias: needs a response length column (characters, tokens "
+            "or words)."
+        )
+    else:
+        human_name = next(iter(data.human_columns))
+        length = bias.length_bias(
+            data.judge_scores, data.human_columns[human_name], data.lengths
+        )
+
+    preference = None
+    if data.generators is None:
+        unavailable.append(
+            "Self-preference: needs a generator column naming which model "
+            "produced each response."
+        )
+    elif judge_model is None:
+        unavailable.append(
+            "Self-preference: needs the judge model's name, to know which "
+            "generator counts as its own. Pass --judge-model."
+        )
+    else:
+        preference = bias.self_preference(
+            data.judge_scores, data.generators, judge_model
+        )
+
+    return {
+        "length": length,
+        "self_preference": preference,
+        "unavailable": unavailable,
     }

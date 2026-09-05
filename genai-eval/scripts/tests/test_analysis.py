@@ -152,5 +152,56 @@ class TestDegenerate(unittest.TestCase):
         self.assertEqual(result["verdict"], "no_ceiling")
 
 
+class TestBiasSection(unittest.TestCase):
+    def test_both_probes_unavailable_on_a_minimal_file(self):
+        data = make_data([1, 2, 3], {"human": [1, 2, 3]})
+        result = analysis.bias_section(data)
+        self.assertIsNone(result["length"])
+        self.assertIsNone(result["self_preference"])
+        joined = " ".join(result["unavailable"]).lower()
+        self.assertIn("length", joined)
+        self.assertIn("generator", joined)
+
+    def test_length_probe_runs_when_lengths_are_present(self):
+        """Judge tracks length exactly, humans invert it, so the gap is the
+        full 2.0 — the same known answer the bias suite pins."""
+        data = make_data(
+            [1, 2, 3, 4, 5],
+            {"human": [5, 4, 3, 2, 1]},
+            lengths=[10, 20, 30, 40, 50],
+        )
+        result = analysis.bias_section(data)
+        self.assertAlmostEqual(result["length"]["judge_rho"], 1.0, places=10)
+        self.assertAlmostEqual(result["length"]["human_rho"], -1.0, places=10)
+        self.assertAlmostEqual(result["length"]["gap"], 2.0, places=10)
+
+    def test_self_preference_needs_a_judge_model_name(self):
+        data = make_data(
+            [5, 5, 3, 3],
+            {"human": [4, 4, 4, 4]},
+            generators=["gpt-x", "gpt-x", "other", "other"],
+        )
+        without = analysis.bias_section(data)
+        self.assertIsNone(without["self_preference"])
+        self.assertTrue(
+            any("judge model" in u.lower() for u in without["unavailable"]),
+            without["unavailable"],
+        )
+
+        with_name = analysis.bias_section(data, judge_model="gpt-x")
+        self.assertAlmostEqual(with_name["self_preference"]["delta"], 2.0, places=10)
+
+    def test_constant_human_scores_leave_the_length_gap_undefined(self):
+        """A judge's raw length correlation is not bias — the gap against the
+        humans is. With no human variance there is no gap to report."""
+        data = make_data(
+            [1, 2, 3, 4, 5],
+            {"human": [3, 3, 3, 3, 3]},
+            lengths=[10, 20, 30, 40, 50],
+        )
+        result = analysis.bias_section(data)
+        self.assertIsNone(result["length"]["gap"])
+
+
 if __name__ == "__main__":
     unittest.main()
