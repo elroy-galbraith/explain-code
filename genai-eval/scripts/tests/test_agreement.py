@@ -351,6 +351,61 @@ class TestBootstrapCI(unittest.TestCase):
         self.assertGreater(covered / trials, 0.85)
         self.assertLessEqual(covered / trials, 1.0)
 
+    def test_percentile_indices_pick_the_expected_estimates(self):
+        """Known answer for the percentile arithmetic, including its float behaviour.
+
+        A statistic returning a fresh consecutive integer per call makes the
+        sorted estimate list 0.0 .. 99.0 for n_resamples=100.
+
+        With confidence=0.90 the arithmetic is NOT the clean decimal 0.05:
+        1.0 - 0.90 is 0.09999999999999998 in binary floating point, so
+        tail = 0.04999999999999999 and tail * 100 = 4.999999999999999, which
+        int() truncates to 4 rather than 5. The upper end is exact:
+        1.0 - tail is 0.95, and 0.95 * 100 is 95.0, so high_index is 95.
+
+        Truncation biases the interval outward at the low end, which is the
+        conservative direction for a confidence interval.
+        """
+        calls = []
+
+        def counting_statistic(sample):
+            calls.append(1)
+            return float(len(calls) - 1)
+
+        low, high = agreement.bootstrap_ci(
+            self._units(1, 1),
+            counting_statistic,
+            n_resamples=100,
+            confidence=0.90,
+            seed=1,
+        )
+        self.assertEqual(low, 4.0)
+        self.assertEqual(high, 95.0)
+
+    def test_resamples_whole_units_not_individual_ratings(self):
+        """The mechanism, pinned directly rather than through a symptom.
+
+        Every element of every resample must be one of the original unit
+        objects. A rating-level resampler would assemble new rating pairs that
+        never appeared in the input, which is exactly what destroys the
+        within-item dependence the docstring warns about.
+        """
+        units = [["a", "a"], ["b", "b"], ["a", "b"], ["b", "a"]]
+        original_ids = {id(unit) for unit in units}
+        seen = []
+
+        def spy(sample):
+            seen.append(sample)
+            return 0.0
+
+        agreement.bootstrap_ci(units, spy, n_resamples=20, seed=3)
+
+        self.assertEqual(len(seen), 20)
+        for sample in seen:
+            self.assertEqual(len(sample), len(units))
+            for unit in sample:
+                self.assertIn(id(unit), original_ids)
+
 
 if __name__ == "__main__":
     unittest.main()
