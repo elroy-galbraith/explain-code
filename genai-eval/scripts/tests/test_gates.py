@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -539,6 +540,20 @@ class TestGate9Preregistration(unittest.TestCase):
 
         self.assertEqual(run_gate(gates.gate_9_preregistration, mutate), [])
 
+    def test_results_recorded_as_a_list_are_walked(self):
+        """A qualification block naturally holds a list of runs. Nothing else
+        exercises the list branch of the walk, so removing that recursion would
+        pass the whole suite."""
+        def mutate(card):
+            card["qualification"] = {"runs": [
+                {"label": "a", "run_at": "2026-09-07T09:00:00Z"},
+                {"label": "b", "run_at": "2026-09-05T09:00:00Z"},
+            ]}
+
+        findings = run_gate(gates.gate_9_preregistration, mutate)
+        self.assertEqual([f.path for f in findings],
+                         ["qualification.runs[1].run_at"])
+
 
 class TestRunAll(unittest.TestCase):
     def test_a_valid_card_produces_no_findings_from_any_gate(self):
@@ -569,6 +584,19 @@ class TestRunAll(unittest.TestCase):
         card, _ = loader.load_card(path)
         found = gates.run_all(card, path)
         self.assertEqual(sorted({f.gate for f in found}), [1, 5])
+
+    def test_run_all_sorts_by_gate_number_not_registry_order(self):
+        """`ALL` happens to be ascending already, so nothing else here would
+        notice if the sort were dropped or the registry reordered."""
+        def mutate(card):
+            card["preregistration"].pop("content_hash")   # gate 9
+            card["decision"].pop("owner")                 # gate 1
+
+        path = write_card(tempfile.mkdtemp(), mutate=mutate)
+        card, _ = loader.load_card(path)
+        with mock.patch.object(gates, "ALL", list(reversed(gates.ALL))):
+            found = gates.run_all(card, path)
+        self.assertEqual([f.gate for f in found], [1, 9])
 
 
 class TestGatesDoNotBleed(unittest.TestCase):
