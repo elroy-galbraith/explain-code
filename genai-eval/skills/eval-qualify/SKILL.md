@@ -26,10 +26,12 @@ to hand you a clean-looking number that outruns what the sample supports.
 
 ## When NOT to use
 
-- **Designing an eval that does not exist yet.** That is `eval-design`
-  (Phase 2 of this plugin), which is not built yet — say so if the user asks
-  for it. This skill qualifies an instrument that already produces scores; it
-  does not choose a construct, write a rubric, or build an item pool.
+- **Designing an eval that does not exist yet.** That is `eval-design` — it
+  names the decision, defines the construct, builds the item pool, and seals
+  an `eval-card.json` before any result exists. This skill qualifies an
+  instrument that already produces scores; it does not choose a construct,
+  write a rubric, or build an item pool, and it has no way to read the card
+  `eval-design` produces (see "Handoff to other skills" below).
 - **Interpreting a benchmark someone else ran with no access to item-level
   data.** A published leaderboard number cannot be qualified from the outside.
   Every step below — the ceiling comparison, the power check, and above all
@@ -75,6 +77,14 @@ human-human ceiling — because it is not tier-gated: it is the core of what
 `calibrate.py` computes on every run, at every tier. A Tier 1 regression check
 still gets an agreement figure; the tier controls what else you check around
 it, not whether you check agreement at all.
+
+This is a different sequence from the numbered steps in `eval-design`'s own
+tier table, and the two share numbers by coincidence, not by design:
+`eval-design`'s step 6 is design work — freezing the grader's configuration
+before any completion exists to score — while this Gate 6 is the measurement
+that step's output eventually gets checked against, run here, not there.
+Finishing `eval-design`'s step 6 does not satisfy this gate; only a real run
+through this skill does.
 
 ## Process
 
@@ -251,18 +261,23 @@ things a script can check. That is the whole point of the card: not more
 paperwork, but fewer places where a reviewer has to take someone's word for
 it.
 
-Then say plainly that `eval-design` — the skill that would actually build
-that card — is not built yet (it is Phase 2 of this plugin). Do not invent a
-card file format, a field list, or a schema to fill the gap; there isn't one
-yet, and guessing one here would just be a second version of the mistake
-Step 5 warns against. This skill's job stops at qualifying an instrument, not
-at inventing the artifact that would eventually hold the result.
+`eval-design` is the skill that builds that card — hand off to it. But say
+plainly what this skill still cannot do: **it has no card mode.** It cannot
+open an `eval-card.json`, read the fields `eval-design` filled in, or append
+a `qualification` block back onto it. Promoting a result into a card today
+means a person carries the numbers across by hand, not a built handoff
+between the two skills. This skill's job stops at qualifying an instrument,
+not at inventing the integration that would eventually connect the two.
 
 ## Handoff to other skills
 
 This skill produces a measurement, not a document for a particular audience.
 Rather than growing a stakeholder-communication section of its own:
 
+- When there is no eval yet to qualify — no construct, no item pool, no
+  protocol — hand off to **`eval-design`** instead of trying to back one out
+  of a bare CSV. It names the decision, defines the construct, builds the
+  item pool, and seals a preregistered threshold into an `eval-card.json`.
 - When the qualification result needs to reach a leadership or non-technical
   audience — a go/no-go recommendation, a plan for closing the gap — hand off
   to the **`improvement-plan`** skill instead of writing that framing here.
@@ -270,8 +285,10 @@ Rather than growing a stakeholder-communication section of its own:
   translated, hand off to **`simplified-technical-english`** (`lite` profile)
   as a final language pass over whatever prose you write for them.
 
-This skill works standalone, on nothing but a CSV, and will keep working that
-way after Phase 2 ships. Once `eval-design` exists, it will add a card mode on
-top of this same tool — appending a `qualification` block to a sealed eval
-card instead of standing alone — but that is additive. Nothing above changes
-because of it.
+This skill works standalone, on nothing but a CSV, and that has not changed
+now that `eval-design` exists: the two skills are not yet wired together.
+`eval-design` produces an `eval-card.json` with a `grader.gold_set` field
+naming a labels CSV — often one shaped exactly like this skill's own input —
+but nothing here reads the card itself, and nothing here writes a
+`qualification` block back onto it. That integration (a card mode for this
+skill) is future work, not something either skill does today.

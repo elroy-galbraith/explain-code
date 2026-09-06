@@ -151,6 +151,15 @@ will run and skip.
 | 2 — per release | Compare options | + 3, 4 | + 7 |
 | 3 — sign-off / external claim | Defend a claim | + 2 (all) | + 8 (all) |
 
+The numbered SOP steps in this table and the numbered gates in §3.2 are
+different sequences that happen to share numbers. Step 6 is design work
+owned by `eval-design` — freezing the grader's configuration (kind, model,
+rubric, gold set) alongside the rest of the protocol, before any completion
+exists to score. Gate 6 is a measurement owned by `eval-qualify` — does
+judge-human agreement reach the human-human floor — and is taken on every
+run at every tier, not tier-gated the way the steps above are. Finishing
+step 6 does not satisfy Gate 6; only a run through `eval-qualify` does.
+
 **Deviation from the source SOP, taken deliberately.** The SOP's tier table
 places step 9 in Tier 1 but omits step 10, even though Gate 10 is the actual
 go/no-go and a regression test plainly has a decision. Here steps 10 and 11 are
