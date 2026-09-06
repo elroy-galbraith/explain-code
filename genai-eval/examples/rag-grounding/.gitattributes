@@ -1,0 +1,12 @@
+# This example's whole point rests on byte-exact files: items/test.jsonl is
+# sha256-sealed in eval-card.json (Gate 5), and protocol.md is sha256-hashed
+# into preregistration.content_hash. Without this file, a checkout on a
+# machine with core.autocrlf=true (the default this repo's environment uses,
+# and there is no repo-wide .gitattributes) silently rewrites LF to CRLF on
+# checkout, which changes both files' bytes and invalidates both hashes --
+# not because anyone tampered with the split, but because of how git checked
+# it out. That would make the example self-tamper on a plain `git clone`.
+#
+# Forcing LF here means the bytes on disk always match what was hashed,
+# regardless of the checking-out machine's line-ending settings.
+* text=auto eol=lf

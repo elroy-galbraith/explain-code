@@ -31,6 +31,11 @@
       "name": "microworld",
       "source": "./microworld",
       "description": "Build a scrubbable, self-contained HTML micro-world simulation that teaches how a system in the repo actually works, grounded in its real code and recorded numbers -- with a verification harness and a self-improving learnings log."
+    },
+    {
+      "name": "genai-eval",
+      "source": "./genai-eval",
+      "description": "Design and qualify a GenAI evaluation as a measurement instrument. eval-design names the decision, defines a falsifiable construct, and seals an eval-card.json that a stdlib-only validator holds to six mechanical gates. eval-qualify measures judge-human agreement with confidence intervals against the human-human ceiling, power against a minimum detectable effect, length and self-preference bias probes, and an observed disagreement taxonomy, standalone on a two-column CSV of judge scores and human labels. The two skills are not yet wired together: eval-qualify has no card mode, so Gates 6, 7, 8, 10 and 11 need a qualification block that does not exist yet. Stdlib-only throughout."
     }
   ]
 }
