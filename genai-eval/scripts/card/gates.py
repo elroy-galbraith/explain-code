@@ -342,21 +342,36 @@ def gate_4_trace_matrix(card, card_path):
     # however they are counted afterwards.
     first_seen = {}
     repeats = {}
+    unusable_lines = []
     for number, row in rows:
         item_id = row.get("item_id") if isinstance(row, dict) else None
         if _blank(item_id):
-            findings.append(Finding(
-                "error", "items.source",
-                "the item on line %d has no item_id, so it cannot be told "
-                "apart from any other item and cannot count toward a claim"
-                % number,
-                gate=4,
-            ))
+            unusable_lines.append(number)
             continue
         if item_id in first_seen:
             repeats.setdefault(item_id, []).append(number)
         else:
             first_seen[item_id] = number
+
+    # One finding for every row with no usable item_id, not one per row: a
+    # pool where the field was never populated would otherwise bury every
+    # other finding under a hundred repeats of the same fact, for the same
+    # reason a duplicated id below is one finding rather than one per repeat.
+    # The message has to hold for both causes of "no usable item_id" -- the
+    # field absent, or present but not a string, such as an integer id from
+    # an ordinary database or spreadsheet export -- so it never tells a
+    # reader with the second kind that a field is missing when it is not.
+    if unusable_lines:
+        findings.append(Finding(
+            "error", "items.source",
+            "%d row%s in the item pool %s no item_id, or one that is not a "
+            "string (%s); a row that cannot be identified cannot be told "
+            "apart from any other item or counted toward a claim"
+            % (len(unusable_lines), "" if len(unusable_lines) == 1 else "s",
+               "has" if len(unusable_lines) == 1 else "have",
+               _line_list(unusable_lines)),
+            gate=4,
+        ))
 
     # One finding per duplicated id, not one per repeated row. An id pasted
     # five hundred times is one violation, and this tool's contract is that a
@@ -441,6 +456,23 @@ def _nonblank_lines(path):
     return count
 
 
+def _normalized_hash(value):
+    """A recorded or computed hex digest, normalized for comparison.
+
+    Strips surrounding whitespace and an optional `sha256:` label, then
+    lowercases. Hex digest case carries no information — `E68D01` and
+    `e68d01` name the same digest — and cards in this repo write
+    `sha256:<hex>` for the protocol hash but bare hex for the split hash, so
+    rejecting either label or either case would be a gate failing over
+    punctuation. Gate 5 and Gate 9 both compare a recorded hash against a
+    freshly computed one and must agree on what counts as a match.
+    """
+    text = value.strip().lower()
+    if text.startswith("sha256:"):
+        text = text[len("sha256:"):]
+    return text
+
+
 def gate_5_sealed_split(card, card_path):
     """Gate 5: is the test split sealed, and is it still the file that was sealed?
 
@@ -500,13 +532,14 @@ def gate_5_sealed_split(card, card_path):
                 "error", "items.splits.test.path",
                 "cannot read the test split: %s" % exc, gate=5))
         else:
-            if actual != recorded:
+            if _normalized_hash(actual) != _normalized_hash(recorded):
                 findings.append(Finding(
                     "error", "items.splits.test.sha256",
                     "the test split has changed since it was sealed (recorded "
                     "%s..., found %s...); every number computed from it "
                     "measures something other than what was sealed"
-                    % (recorded[:12], actual[:12]),
+                    % (_normalized_hash(recorded)[:12],
+                       _normalized_hash(actual)[:12]),
                     gate=5,
                 ))
             elif not items_in_split:
@@ -579,19 +612,6 @@ def _result_timestamps(card):
     return found, unreadable
 
 
-def _bare_hash(value):
-    """A recorded hash without its `sha256:` label, lowercased.
-
-    Cards in this repo write `sha256:<hex>` for the protocol hash and bare hex
-    for the split hash. Both name the same digest, and rejecting one form would
-    be a gate failing over punctuation.
-    """
-    text = value.strip().lower()
-    if text.startswith("sha256:"):
-        text = text[len("sha256:"):]
-    return text
-
-
 def gate_9_preregistration(card, card_path):
     """Gate 9: was the decision threshold set before the run?
 
@@ -631,14 +651,15 @@ def gate_9_preregistration(card, card_path):
                 "error", "preregistration.protocol.prompts_ref",
                 "cannot read the sealed protocol: %s" % exc, gate=9))
         else:
-            if actual != _bare_hash(recorded):
+            if _normalized_hash(actual) != _normalized_hash(recorded):
                 findings.append(Finding(
                     "error", "preregistration.content_hash",
                     "the protocol has changed since it was sealed (recorded "
                     "%s..., found %s...); the prompts, seeds or decoding "
                     "settings a result was produced under are not the ones "
                     "that were preregistered"
-                    % (_bare_hash(recorded)[:12], actual[:12]),
+                    % (_normalized_hash(recorded)[:12],
+                       _normalized_hash(actual)[:12]),
                     gate=9,
                 ))
 

@@ -436,7 +436,12 @@ class TestGate4TraceMatrix(unittest.TestCase):
 
     def test_a_non_string_item_id_cannot_be_counted_as_distinct(self):
         """An id that is not a string is not a usable identifier, so the row
-        is reported and left out of the count rather than counted anyway."""
+        is reported and left out of the count rather than counted anyway.
+
+        The row *has* an item_id -- it is just the wrong type -- so the
+        message must not tell the reader the field is absent. It has to name
+        both possible causes and let the reader go look, rather than pin the
+        one sentence that would be false here."""
         items = [{"item_id": "i1", "claim_id": "cl1"},
                  {"item_id": "i2", "claim_id": "cl1"},
                  {"item_id": 5, "claim_id": "cl1"},
@@ -446,8 +451,56 @@ class TestGate4TraceMatrix(unittest.TestCase):
         findings = self._run(items=items)
         self.assertEqual([f.path for f in findings],
                          ["items.source", "claims[0]"])
+        self.assertIn("1 row", findings[0].message)
         self.assertIn("line 3", findings[0].message)
+        self.assertIn("or one that is not a string", findings[0].message)
         self.assertIn("has 2 distinct items", findings[1].message)
+
+    def test_a_hundred_rows_with_no_item_id_collapse_to_one_finding(self):
+        """The wall of a hundred and one findings this fix removes: a pool
+        where the field was simply never populated -- no `item_id` on any
+        row -- must still surface as one thing to fix, alongside the
+        thin-claim findings, not as one finding per row."""
+        items = [{"claim_id": "cl1" if n % 2 == 0 else "cl2"}
+                 for n in range(100)]
+        findings = self._run(items=items)
+        unusable = [f for f in findings if f.path == "items.source"]
+        self.assertEqual(len(unusable), 1, [f.message for f in unusable])
+        self.assertEqual(unusable[0].gate, 4)
+        self.assertIn("100 rows", unusable[0].message)
+        thin = [f for f in findings if f.path.startswith("claims[")]
+        self.assertEqual([f.path for f in thin], ["claims[0]", "claims[1]"])
+
+    def test_integer_item_ids_collapse_to_one_finding_naming_the_type_issue(self):
+        """An ordinary database or spreadsheet export writes item_id as an
+        integer. Every row here has an id, just not a usable one, so the
+        single collapsed finding must not claim the field is absent."""
+        items = [{"item_id": n, "claim_id": "cl1" if n % 2 == 0 else "cl2"}
+                 for n in range(50)]
+        findings = self._run(items=items)
+        unusable = [f for f in findings if f.path == "items.source"]
+        self.assertEqual(len(unusable), 1, [f.message for f in unusable])
+        self.assertIn("50 rows", unusable[0].message)
+        self.assertIn("or one that is not a string", unusable[0].message)
+
+    def test_a_missing_id_and_a_wrong_typed_id_collapse_together(self):
+        """One row has no item_id at all, another has one of the wrong
+        type. Both are 'no usable item_id' and belong in the same finding,
+        which must name both lines so the reader can see which case is
+        which."""
+        items = [{"item_id": "i1", "claim_id": "cl1"},
+                 {"item_id": "i2", "claim_id": "cl1"},
+                 {"item_id": "i3", "claim_id": "cl1"},
+                 {"claim_id": "cl1"},
+                 {"item_id": "i4", "claim_id": "cl2"},
+                 {"item_id": "i5", "claim_id": "cl2"},
+                 {"item_id": "i6", "claim_id": "cl2"},
+                 {"item_id": 7, "claim_id": "cl2"}]
+        findings = self._run(items=items)
+        self.assertEqual(len(findings), 1, [f.message for f in findings])
+        self.assertEqual(findings[0].path, "items.source")
+        self.assertIn("2 rows", findings[0].message)
+        self.assertIn("lines 4, 8", findings[0].message)
 
     def test_a_duplicate_is_reported_even_when_its_claim_is_unknown(self):
         """Two rows sharing an id are ambiguous however they are counted, so
@@ -643,6 +696,33 @@ class TestGate5SealedSplit(unittest.TestCase):
         self.assertEqual([f.path for f in findings],
                          ["items.splits.test.sha256"])
 
+    def test_an_uppercase_recorded_hash_still_matches(self):
+        """Gate 9 already lowercases a recorded hash before comparing it;
+        Gate 5 has to agree, or an uppercase content hash would validate
+        while an uppercase split hash does not, for no reason either
+        docstring intends. Hex digest case carries no information."""
+        findings = self._run(
+            lambda c: c["items"]["splits"]["test"].update(
+                sha256=c["items"]["splits"]["test"]["sha256"].upper()))
+        self.assertEqual(findings, [])
+
+    def test_a_genuinely_changed_split_still_fails_case_normalization_aside(self):
+        """Accepting either case must not accidentally widen the match into
+        accepting a different digest -- the contamination tripwire still has
+        to fire on a split that was actually tampered with."""
+        def tamper(path):
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write('{"item_id": "sneaky", "claim_id": "cl1"}\n')
+
+        findings = self._run(
+            mutate=lambda c: c["items"]["splits"]["test"].update(
+                sha256=c["items"]["splits"]["test"]["sha256"].upper()),
+            tamper=tamper)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].gate, 5)
+        self.assertEqual(findings[0].level, "error")
+        self.assertIn("sha256", findings[0].path)
+
 
 class TestGate9Preregistration(unittest.TestCase):
     def _run(self, mutate=None, protocol=None, tamper=None):
@@ -798,6 +878,24 @@ class TestGate9Preregistration(unittest.TestCase):
 
         self.assertEqual(self._run(bare), [])
         self.assertEqual(self._run(shouting), [])
+
+    def test_a_genuinely_rewritten_protocol_still_fails_case_normalization_aside(self):
+        """Accepting either case for the recorded hash must not accidentally
+        widen the match into accepting a different digest -- a protocol that
+        was actually rewritten after sealing still has to fail even when the
+        recorded hash is shouted in caps."""
+        def tamper(path):
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write("temperature 2.0, best-of-50, prompts rewritten "
+                             "after seeing the results\n")
+
+        findings = self._run(
+            mutate=lambda c: c["preregistration"].update(
+                content_hash=c["preregistration"]["content_hash"].upper()),
+            tamper=tamper)
+        self.assertEqual(len(findings), 1, [f.message for f in findings])
+        self.assertEqual(findings[0].path, "preregistration.content_hash")
+        self.assertEqual(findings[0].gate, 9)
 
     def test_an_unparseable_result_timestamp_fires_at_its_own_path(self):
         """Silently dropping it means Gate 9's ordering check simply does not
