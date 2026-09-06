@@ -285,23 +285,33 @@ class TestNumericCategories(unittest.TestCase):
 
 
 class TestConsoleEncoding(unittest.TestCase):
-    def test_the_ordinary_report_is_encodable_on_a_legacy_codepage(self):
-        """The report must remain ASCII-encodable. This test catches non-ASCII
-        characters arriving through computed values, complementing the static
-        literal checker in test_ascii_output.py. The dynamic path is otherwise
-        invisible to source inspection."""
+    def test_the_rendered_report_contains_no_non_ascii_character(self):
+        """The end-to-end counterpart to test_ascii_output.py, which can only
+        see string literals in the source. This one renders a real report and
+        checks the bytes, so it catches a character that arrives through a
+        computed value: a rater name, an item id, a formatted number.
+
+        It runs on a UTF-8 stream deliberately. The CLIs set
+        errors="backslashreplace", so on a legacy codepage a stray character
+        would print as an escape and the report would survive; that is the
+        right behaviour there, and it is why checking survival proves nothing.
+        Only a stream that can encode everything lets the character reach this
+        assertion intact.
+        """
         path = write_csv(ONE_RATER)
-        environment = dict(os.environ, PYTHONIOENCODING="cp437")
+        environment = dict(os.environ, PYTHONIOENCODING="utf-8")
         finished = subprocess.run(
             [sys.executable, CALIBRATE, path, "--seed", "1", "--resamples", "200"],
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self.assertEqual(finished.returncode, 0, finished.stderr.decode("utf-8", "replace"))
-        self.assertIn(
-            "Judge-human agreement", finished.stdout.decode("cp437", "replace")
-        )
+        self.assertEqual(finished.returncode, 0,
+                         finished.stderr.decode("utf-8", "replace"))
+        offenders = sorted({byte for byte in finished.stdout if byte > 127})
+        self.assertEqual(
+            offenders, [],
+            "the rendered report carried non-ASCII bytes: %r" % (offenders,))
 
 
 class TestUnencodableConsole(unittest.TestCase):
