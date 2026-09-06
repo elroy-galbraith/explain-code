@@ -71,7 +71,7 @@ build a rubric for.
 sequences share numbers by coincidence, not by design.** Step 6 above is
 design work this skill owns: freezing the grader's configuration alongside
 the rest of the protocol, before any completion exists to score. Gate 6
-("does judge-human agreement reach the human-human floor?") is a
+("does judge-human agreement reach the human-human ceiling?") is a
 measurement owned by `eval-qualify`, taken on every run at every tier once
 real judge and human scores exist — it is not tier-gated the way the steps
 above are, and finishing step 6 here does not satisfy it. See

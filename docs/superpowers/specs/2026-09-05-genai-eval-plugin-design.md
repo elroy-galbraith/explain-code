@@ -133,7 +133,7 @@ monitoring state.
 | 3 | Falsifiable construct | Mechanical | `negative_evidence` non-empty (quality remains judgement) |
 | 4 | Every item maps to a claim, every claim has 3+ items | Mechanical | orphan and thin-claim scan across pool and card |
 | 5 | Test split sealed and uncontaminated | Mechanical | recorded sha256 re-verified against the file; canary present |
-| 6 | Judge-human agreement reaches the human-human floor | Computed | Krippendorff alpha with bootstrap CIs, compared |
+| 6 | Judge-human agreement reaches the human-human ceiling | Computed | Krippendorff alpha with bootstrap CIs, compared |
 | 7 | Instrument detects the MDE | Computed | power calculation vs. actual item count |
 | 8 | Criterion evidence on a real sample | Judgement | validator requires a non-empty block with an `n` and a held-out ref; otherwise emits the "proxy of unknown quality" label |
 | 9 | Threshold set before the run | Mechanical | prereg `content_hash` and `sealed_at` predate every result timestamp |
@@ -156,7 +156,7 @@ different sequences that happen to share numbers. Step 6 is design work
 owned by `eval-design` — freezing the grader's configuration (kind, model,
 rubric, gold set) alongside the rest of the protocol, before any completion
 exists to score. Gate 6 is a measurement owned by `eval-qualify` — does
-judge-human agreement reach the human-human floor — and is taken on every
+judge-human agreement reach the human-human ceiling — and is taken on every
 run at every tier, not tier-gated the way the steps above are. Finishing
 step 6 does not satisfy Gate 6; only a run through `eval-qualify` does.
 
