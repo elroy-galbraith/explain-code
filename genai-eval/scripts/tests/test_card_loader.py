@@ -14,6 +14,11 @@ from card import loader
 from card_fixture import write_card
 
 
+def _copy(entry):
+    """A deep copy, so a mutation of the duplicate cannot touch the original."""
+    return json.loads(json.dumps(entry))
+
+
 class TestLoadValidCard(unittest.TestCase):
     def test_a_valid_card_loads_with_no_structural_findings(self):
         path = write_card(tempfile.mkdtemp())
@@ -91,6 +96,96 @@ class TestStructuralFindings(unittest.TestCase):
         findings = self._findings(lambda c: c.update(claims=[]))
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].path, "claims")
+
+
+class TestDuplicateIds(unittest.TestCase):
+    """The schema says "unique within the card" for five blocks of ids and
+    nothing enforced it.
+
+    This lives in the loader rather than in a gate because it is a structural
+    property of the card and it spans five blocks answering to different
+    gates -- and because the loader already owns "this card is malformed".
+    Gate 2 checks duplicate *ranks*, so uniqueness was in scope for the design
+    and the ids were simply missed.
+    """
+
+    def _duplicates(self, mutate):
+        path = write_card(tempfile.mkdtemp(), mutate=mutate)
+        _, findings = loader.load_card(path)
+        return [f for f in findings if "already used" in f.message]
+
+    def test_a_duplicate_id_is_reported_in_every_block_that_requires_one(self):
+        """A duplicate claim id makes the trace matrix ambiguous: an item's
+        `claim_id` no longer says which claim it supports."""
+        expected = {
+            "constructs": "constructs[1].id",
+            "claims": "claims[2].id",
+            "evidence_model": "evidence_model[2].id",
+            "task_model": "task_model[2].id",
+        }
+        for block, path in sorted(expected.items()):
+            with self.subTest(block=block):
+                findings = self._duplicates(
+                    lambda c, b=block: c[b].append(_copy(c[b][0])))
+                self.assertEqual([f.path for f in findings], [path])
+                self.assertIsNone(findings[0].gate)
+                self.assertEqual(findings[0].level, "error")
+
+    def test_a_duplicate_harm_pathway_id_is_reported(self):
+        """`harm_pathways` carries the same rule but lives inside `domain`, so
+        it is not one of LIST_OF_OBJECT_BLOCKS and is reached separately -- a
+        check that skipped it would still pass the four tests above."""
+        def mutate(card):
+            pathways = card["domain"]["harm_pathways"]
+            pathways.append(_copy(pathways[0]))
+
+        findings = self._duplicates(mutate)
+        self.assertEqual([f.path for f in findings],
+                         ["domain.harm_pathways[1].id"])
+
+    def test_the_finding_lands_on_the_second_occurrence_and_names_the_first(self):
+        """The duplicate is the entry the author added, so that is the index
+        to point at; the original is named in the message so both are findable
+        without counting."""
+        def mutate(card):
+            card["claims"].append(_copy(card["claims"][0]))
+
+        findings = self._duplicates(mutate)
+        self.assertEqual(findings[0].path, "claims[2].id")
+        self.assertIn("'cl1'", findings[0].message)
+        self.assertIn("claims[0]", findings[0].message)
+
+    def test_three_copies_of_one_id_report_the_second_and_the_third(self):
+        """Reporting only the first repeat would leave a card needing two
+        passes to fix, which is what this validator exists not to do."""
+        def mutate(card):
+            for _ in range(2):
+                card["claims"].append(_copy(card["claims"][0]))
+
+        findings = self._duplicates(mutate)
+        self.assertEqual([f.path for f in findings],
+                         ["claims[2].id", "claims[3].id"])
+
+    def test_distinct_ids_in_every_block_report_nothing(self):
+        """The valid fixture is the control: if it tripped this check, every
+        test above would be passing for the wrong reason."""
+        self.assertEqual(self._duplicates(None), [])
+
+    def test_a_non_string_id_is_not_treated_as_a_duplicate_of_another(self):
+        """Two entries whose ids are both `null` are not two uses of one id --
+        they are two entries with no id, which is a different complaint and
+        not this check's to make. An unhashable id must not raise either."""
+        def mutate(card):
+            card["claims"][0]["id"] = None
+            card["claims"][1]["id"] = None
+            card["constructs"].append(
+                {"id": ["x"], "definition": "d", "negative_evidence": ["n"],
+                 "harm_pathways": ["hp1"]})
+            card["constructs"].append(
+                {"id": ["x"], "definition": "d", "negative_evidence": ["n"],
+                 "harm_pathways": ["hp1"]})
+
+        self.assertEqual(self._duplicates(mutate), [])
 
 
 class TestUnreadableInput(unittest.TestCase):

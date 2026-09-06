@@ -50,6 +50,38 @@ class Finding:
         return "%s [%s] %s: %s" % (self.level.upper(), label, self.path, self.message)
 
 
+def _duplicate_ids(entries, prefix):
+    """Findings for repeated `id` values in one list-of-objects block.
+
+    The schema says "unique within the card" for every one of these blocks and
+    nothing enforced it. A duplicate claim id makes the trace matrix ambiguous:
+    an item's `claim_id` no longer says which claim it supports, and Gate 4
+    counts both claims' items into one bucket.
+
+    This belongs to the loader rather than to a gate: it is a structural
+    property of the card, and it spans five blocks that answer to different
+    gates. The finding lands on the *second* occurrence, which is the one the
+    author added.
+    """
+    findings, first_seen = [], {}
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            continue
+        identifier = entry.get("id")
+        if not isinstance(identifier, str):
+            continue
+        if identifier in first_seen:
+            findings.append(Finding(
+                "error", "%s[%d].id" % (prefix, index),
+                "id %r is already used by %s[%d]; ids must be unique within "
+                "the card, and a duplicate makes every reference to it "
+                "ambiguous" % (identifier, prefix, first_seen[identifier]),
+            ))
+        else:
+            first_seen[identifier] = index
+    return findings
+
+
 def resolve(card_path, relative):
     """Resolve a path found inside a card, against the card's own directory.
 
@@ -117,6 +149,15 @@ def load_card(path):
                     "error", "%s[%d]" % (block, index),
                     "expected an object, found %s" % type(entry).__name__,
                 ))
+        findings.extend(_duplicate_ids(value, block))
+
+    # `harm_pathways` carries the same uniqueness rule but lives inside
+    # `domain`, so it is not one of LIST_OF_OBJECT_BLOCKS and has to be reached
+    # separately.
+    domain = card.get("domain")
+    pathways = domain.get("harm_pathways") if isinstance(domain, dict) else None
+    if isinstance(pathways, list):
+        findings.extend(_duplicate_ids(pathways, "domain.harm_pathways"))
 
     version = card.get("schema_version")
     if version is not None and version not in SCHEMA_VERSIONS:

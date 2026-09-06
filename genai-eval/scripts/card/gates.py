@@ -49,6 +49,30 @@ def _mapping(value):
     return value if isinstance(value, dict) else {}
 
 
+def _sequence(value):
+    """A block as a list, or an empty one if the card put something else there.
+
+    `card.get(block) or []` looks like it guards this and does not: a truthy
+    non-list passes straight through and `enumerate` raises on it. Same reason
+    as `_mapping` — the loader reports the wrong shape, but it returns findings
+    rather than raising, so the gates still run over the card.
+    """
+    return value if isinstance(value, list) else []
+
+
+def _known(value, identifiers):
+    """Is `value` one of `identifiers`, without raising when it is not an id?
+
+    Every collection passed in here is built with an `isinstance(..., str)`
+    filter, so a non-string could never be a member — but `value in
+    identifiers` *raises* on an unhashable value (a card that wrote a list
+    where an id belongs) rather than answering False. A gate that raises takes
+    the whole report down; answering False produces the "references unknown X"
+    finding the author actually needs.
+    """
+    return isinstance(value, str) and value in identifiers
+
+
 def gate_1_decision(card):
     """Gate 1: is there a named decision-owner and an action for every outcome?
 
@@ -66,8 +90,9 @@ def gate_1_decision(card):
             gate=1,
         ))
 
-    outcomes = decision.get("outcomes") or []
-    seen = {o.get("result") for o in _objects(outcomes)}
+    outcomes = _sequence(decision.get("outcomes"))
+    seen = {o.get("result") for o in _objects(outcomes)
+            if isinstance(o.get("result"), str)}
     for required in REQUIRED_OUTCOMES:
         if required not in seen:
             findings.append(Finding(
@@ -96,9 +121,9 @@ def gate_2_harm_pathways(card):
     justifies measuring any pathway on it equally.
     """
     findings = []
-    raw = _mapping(card.get("domain")).get("harm_pathways")
-    pathways = raw if isinstance(raw, list) else []
-    by_id = {p.get("id"): p for p in pathways if isinstance(p, dict)}
+    pathways = _sequence(_mapping(card.get("domain")).get("harm_pathways"))
+    by_id = {p.get("id"): p for p in pathways
+             if isinstance(p, dict) and isinstance(p.get("id"), str)}
 
     ranks = []
     for index, pathway in enumerate(pathways):
@@ -126,11 +151,10 @@ def gate_2_harm_pathways(card):
             seen_ranks[rank] = index
 
     referenced = set()
-    for index, construct in enumerate(card.get("constructs") or []):
+    for index, construct in enumerate(_sequence(card.get("constructs"))):
         if not isinstance(construct, dict):
             continue
-        listed = construct.get("harm_pathways")
-        listed = listed if isinstance(listed, list) else []
+        listed = _sequence(construct.get("harm_pathways"))
         if not listed:
             findings.append(Finding(
                 "error", "constructs[%d].harm_pathways" % index,
@@ -138,8 +162,9 @@ def gate_2_harm_pathways(card):
                 gate=2,
             ))
         for reference in listed:
-            referenced.add(reference)
-            if reference not in by_id:
+            if isinstance(reference, str):
+                referenced.add(reference)
+            if not _known(reference, by_id):
                 findings.append(Finding(
                     "error", "constructs[%d].harm_pathways" % index,
                     "construct %r references unknown pathway %r"
@@ -149,7 +174,7 @@ def gate_2_harm_pathways(card):
 
     for index, pathway in enumerate(pathways):
         identifier = pathway.get("id") if isinstance(pathway, dict) else None
-        if identifier is not None and identifier not in referenced:
+        if identifier is not None and not _known(identifier, referenced):
             findings.append(Finding(
                 "warning", "domain.harm_pathways[%d]" % index,
                 "pathway %r is ranked but no construct measures it" % identifier,
@@ -167,7 +192,7 @@ def gate_3_falsifiable(card):
     which means every result confirms it, which means it measures nothing.
     """
     findings = []
-    for index, construct in enumerate(card.get("constructs") or []):
+    for index, construct in enumerate(_sequence(card.get("constructs"))):
         if not isinstance(construct, dict):
             continue
         if not _nonempty_strings(construct.get("negative_evidence")):
@@ -186,6 +211,11 @@ MINIMUM_ITEMS_PER_CLAIM = 3
 def _read_pool(path):
     """Read a JSONL item pool. Returns (rows, findings).
 
+    `rows` is a list of (line number, parsed row) pairs. The line number is
+    carried because a row that is missing the field naming it — no `item_id` —
+    cannot be pointed at any other way, and "fix the item with no id" is not an
+    actionable finding in a pool of five hundred.
+
     `rows` is None when the file could not be opened at all. There is nothing
     to count in that case, and reporting every claim as having zero items would
     bury the one finding that matters under derivative noise. A malformed
@@ -199,14 +229,17 @@ def _read_pool(path):
                 if not line.strip():
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    rows.append((number, json.loads(line)))
                 except json.JSONDecodeError as exc:
                     findings.append(Finding(
                         "error", "items.source",
                         "line %d of the item pool is not JSON: %s" % (number, exc),
                         gate=4,
                     ))
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
+        # UnicodeDecodeError is a ValueError, not an OSError, so it would
+        # otherwise escape this gate and the CLI both. A pool saved as cp1252
+        # is not a readable pool, and that is the finding to report.
         findings.append(Finding(
             "error", "items.source",
             "cannot read the item pool: %s" % exc, gate=4))
@@ -222,14 +255,16 @@ def gate_4_trace_matrix(card, card_path):
     which is the difference between a result and a leaderboard entry.
     """
     findings = []
-    construct_ids = {c.get("id") for c in _objects(card.get("constructs"))}
-    claims = card.get("claims") or []
-    claim_ids = {c.get("id") for c in _objects(claims)}
+    construct_ids = {c.get("id") for c in _objects(card.get("constructs"))
+                     if isinstance(c.get("id"), str)}
+    claims = _sequence(card.get("claims"))
+    claim_ids = {c.get("id") for c in _objects(claims)
+                 if isinstance(c.get("id"), str)}
 
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict):
             continue
-        if claim.get("construct") not in construct_ids:
+        if not _known(claim.get("construct"), construct_ids):
             findings.append(Finding(
                 "error", "claims[%d].construct" % index,
                 "claim %r references unknown construct %r"
@@ -238,10 +273,10 @@ def gate_4_trace_matrix(card, card_path):
             ))
 
     for block in ("evidence_model", "task_model"):
-        for index, entry in enumerate(card.get(block) or []):
+        for index, entry in enumerate(_sequence(card.get(block))):
             if not isinstance(entry, dict):
                 continue
-            if entry.get("claim") not in claim_ids:
+            if not _known(entry.get("claim"), claim_ids):
                 findings.append(Finding(
                     "error", "%s[%d].claim" % (block, index),
                     "%s entry %r references unknown claim %r"
@@ -249,20 +284,22 @@ def gate_4_trace_matrix(card, card_path):
                     gate=4,
                 ))
 
-    evidenced = {e.get("claim") for e in _objects(card.get("evidence_model"))}
-    tasked = {t.get("claim") for t in _objects(card.get("task_model"))}
+    evidenced = {e.get("claim") for e in _objects(card.get("evidence_model"))
+                 if isinstance(e.get("claim"), str)}
+    tasked = {t.get("claim") for t in _objects(card.get("task_model"))
+              if isinstance(t.get("claim"), str)}
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict):
             continue
         identifier = claim.get("id")
-        if identifier not in evidenced:
+        if not _known(identifier, evidenced):
             findings.append(Finding(
                 "error", "claims[%d]" % index,
                 "claim %r has no evidence model entry, so nothing says what "
                 "would be observed to support it" % identifier,
                 gate=4,
             ))
-        if identifier not in tasked:
+        if not _known(identifier, tasked):
             findings.append(Finding(
                 "error", "claims[%d]" % index,
                 "claim %r has no task model entry, so nothing elicits it"
@@ -271,7 +308,10 @@ def gate_4_trace_matrix(card, card_path):
             ))
 
     source = _mapping(card.get("items")).get("source")
-    if not source:
+    if _blank(source):
+        # Not `if not source`: a card that put a number here would then reach
+        # `resolve()`, which wants a path and raises on anything else. Gate 5
+        # already guards its own path this way.
         findings.append(Finding(
             "error", "items.source", "no item pool is named", gate=4))
         return findings
@@ -281,18 +321,47 @@ def gate_4_trace_matrix(card, card_path):
     if rows is None:
         return findings
 
+    # Distinctness first, and independently of whether a row's claim resolves:
+    # two rows sharing an id are ambiguous about which item a score belongs to
+    # however they are counted afterwards.
+    first_seen = {}
+    for number, row in rows:
+        item_id = row.get("item_id") if isinstance(row, dict) else None
+        if _blank(item_id):
+            findings.append(Finding(
+                "error", "items.source",
+                "the item on line %d has no item_id, so it cannot be told "
+                "apart from any other item and cannot count toward a claim"
+                % number,
+                gate=4,
+            ))
+            continue
+        if item_id in first_seen:
+            findings.append(Finding(
+                "error", "items.source",
+                "item_id %r on line %d is already used on line %d; two rows "
+                "sharing an id are ambiguous about which item a score belongs "
+                "to" % (item_id, number, first_seen[item_id]),
+                gate=4,
+            ))
+        else:
+            first_seen[item_id] = number
+
+    # Count *distinct* item ids per claim, not rows. Three copies of one item
+    # carry no more claim-level information than one copy, so counting rows
+    # makes the floor satisfiable by copy-paste.
     counts = {}
-    for index, row in enumerate(rows):
+    for number, row in rows:
         claim_id = row.get("claim_id") if isinstance(row, dict) else None
         if claim_id is None:
             findings.append(Finding(
                 "error", "items.source",
                 "item %r has no claim_id, so it traces to nothing"
-                % (row.get("item_id") if isinstance(row, dict) else index),
+                % (row.get("item_id") if isinstance(row, dict) else number),
                 gate=4,
             ))
             continue
-        if claim_id not in claim_ids:
+        if not _known(claim_id, claim_ids):
             findings.append(Finding(
                 "error", "items.source",
                 "item %r references unknown claim %r"
@@ -300,18 +369,20 @@ def gate_4_trace_matrix(card, card_path):
                 gate=4,
             ))
             continue
-        counts[claim_id] = counts.get(claim_id, 0) + 1
+        item_id = row.get("item_id")
+        if not _blank(item_id):
+            counts.setdefault(claim_id, set()).add(item_id)
 
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict):
             continue
         identifier = claim.get("id")
-        count = counts.get(identifier, 0)
+        count = len(counts[identifier]) if _known(identifier, counts) else 0
         if count < MINIMUM_ITEMS_PER_CLAIM:
             findings.append(Finding(
                 "error", "claims[%d]" % index,
-                "claim %r has %d items; %d are needed before a score can be "
-                "read at the claim level"
+                "claim %r has %d distinct items; %d are needed before a score "
+                "can be read at the claim level"
                 % (identifier, count, MINIMUM_ITEMS_PER_CLAIM),
                 gate=4,
             ))
@@ -325,6 +396,23 @@ def _sha256_of(path):
         for chunk in iter(lambda: handle.read(65536), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _nonblank_lines(path):
+    """How many non-blank lines a file has, counted over raw bytes.
+
+    Bytes, not decoded text: Gate 5 is a byte-level gate, and decoding to count
+    lines would raise UnicodeDecodeError — a ValueError, which the CLI does not
+    catch — on a split that is not valid UTF-8. Counting lines rather than
+    parsing them is deliberate too; whether each line is a well-formed item is
+    Gate 4's question.
+    """
+    count = 0
+    with open(path, "rb") as handle:
+        for line in handle:
+            if line.strip():
+                count += 1
+    return count
 
 
 def gate_5_sealed_split(card, card_path):
@@ -377,8 +465,10 @@ def gate_5_sealed_split(card, card_path):
             "error", "items.splits.test.path",
             "no test split file is named", gate=5))
     else:
+        resolved = resolve(card_path, path)
         try:
-            actual = _sha256_of(resolve(card_path, path))
+            actual = _sha256_of(resolved)
+            items_in_split = _nonblank_lines(resolved)
         except OSError as exc:
             findings.append(Finding(
                 "error", "items.splits.test.path",
@@ -391,6 +481,18 @@ def gate_5_sealed_split(card, card_path):
                     "%s..., found %s...); every number computed from it "
                     "measures something other than what was sealed"
                     % (recorded[:12], actual[:12]),
+                    gate=5,
+                ))
+            elif not items_in_split:
+                # The hash of an empty file is a perfectly valid sha256, so
+                # the seal check alone passes a split that seals nothing. A
+                # card can otherwise validate clean while committing to no
+                # items at all.
+                findings.append(Finding(
+                    "error", "items.splits.test.path",
+                    "the sealed test split is empty; a split with no items "
+                    "seals nothing, and every number computed from it is "
+                    "computed from no evidence",
                     gate=5,
                 ))
 
@@ -418,8 +520,16 @@ def _parse_timestamp(value):
 
 
 def _result_timestamps(card):
-    """Every timestamp under `qualification` that looks like a result time."""
-    found = []
+    """Result times under `qualification`. Returns (parsed, unreadable).
+
+    Both lists hold (path, ...) pairs: `parsed` carries the datetime for every
+    value that could be read, `unreadable` the raw value for every one that
+    was written and could not. Dropping the second kind silently is the wrong
+    answer -- the card claims a result time, Gate 9's ordering check then
+    simply does not happen for it, and nothing says so. A key that is absent
+    entirely, or explicitly null, claims nothing and is in neither list.
+    """
+    found, unreadable = [], []
 
     def walk(node, path):
         if isinstance(node, dict):
@@ -428,33 +538,83 @@ def _result_timestamps(card):
                     parsed = _parse_timestamp(value)
                     if parsed is not None:
                         found.append((path + "." + key, parsed))
+                    elif value is not None:
+                        unreadable.append((path + "." + key, value))
                 else:
                     walk(value, path + "." + key)
         elif isinstance(node, list):
             for index, value in enumerate(node):
                 walk(value, "%s[%d]" % (path, index))
 
-    walk(card.get("qualification") or {}, "qualification")
-    return found
+    # No shape guard needed: `walk` reads a dict or a list and ignores
+    # anything else, so a qualification block of the wrong shape yields
+    # nothing rather than raising.
+    walk(card.get("qualification"), "qualification")
+    return found, unreadable
 
 
-def gate_9_preregistration(card):
+def _bare_hash(value):
+    """A recorded hash without its `sha256:` label, lowercased.
+
+    Cards in this repo write `sha256:<hex>` for the protocol hash and bare hex
+    for the split hash. Both name the same digest, and rejecting one form would
+    be a gate failing over punctuation.
+    """
+    text = value.strip().lower()
+    if text.startswith("sha256:"):
+        text = text[len("sha256:"):]
+    return text
+
+
+def gate_9_preregistration(card, card_path):
     """Gate 9: was the decision threshold set before the run?
 
     This is the gate that stops the goalposts moving, and it is checkable only
     because the card records a hash and a timestamp before any result exists.
     Everyone believes they would not move a threshold after seeing the number.
+
+    The hash is recomputed here, not merely required to be present. The schema
+    says `content_hash` exists so the protocol "cannot be edited after the fact
+    without detection" — a promise that only a recomputation keeps. Gate 5 does
+    exactly this for the sealed split, and this gate mirrors it.
     """
     findings = []
     prereg = _mapping(card.get("preregistration"))
 
-    if _blank(prereg.get("content_hash")):
+    recorded = prereg.get("content_hash")
+    prompts_ref = _mapping(prereg.get("protocol")).get("prompts_ref")
+    if _blank(recorded):
         findings.append(Finding(
             "error", "preregistration.content_hash",
             "no content hash, so nothing shows the protocol is the one that "
             "was sealed",
             gate=9,
         ))
+    elif _blank(prompts_ref):
+        findings.append(Finding(
+            "error", "preregistration.protocol.prompts_ref",
+            "a content hash is recorded but no protocol file is named; a hash "
+            "over a file the card does not name proves nothing",
+            gate=9,
+        ))
+    else:
+        try:
+            actual = _sha256_of(resolve(card_path, prompts_ref))
+        except OSError as exc:
+            findings.append(Finding(
+                "error", "preregistration.protocol.prompts_ref",
+                "cannot read the sealed protocol: %s" % exc, gate=9))
+        else:
+            if actual != _bare_hash(recorded):
+                findings.append(Finding(
+                    "error", "preregistration.content_hash",
+                    "the protocol has changed since it was sealed (recorded "
+                    "%s..., found %s...); the prompts, seeds or decoding "
+                    "settings a result was produced under are not the ones "
+                    "that were preregistered"
+                    % (_bare_hash(recorded)[:12], actual[:12]),
+                    gate=9,
+                ))
 
     sealed_at = _parse_timestamp(prereg.get("sealed_at"))
     if sealed_at is None:
@@ -474,8 +634,19 @@ def gate_9_preregistration(card):
             gate=9,
         ))
 
+    stamps, unreadable = _result_timestamps(card)
+
+    for path, value in unreadable:
+        findings.append(Finding(
+            "error", path,
+            "result timestamp %r is not a parseable ISO 8601 timestamp, so "
+            "this gate cannot check it against the preregistration seal"
+            % (value,),
+            gate=9,
+        ))
+
     if sealed_at is not None:
-        for path, stamp in _result_timestamps(card):
+        for path, stamp in stamps:
             if stamp < sealed_at:
                 findings.append(Finding(
                     "error", path,
@@ -495,7 +666,7 @@ ALL = [
     (3, gate_3_falsifiable, False),
     (4, gate_4_trace_matrix, True),
     (5, gate_5_sealed_split, True),
-    (9, gate_9_preregistration, False),
+    (9, gate_9_preregistration, True),
 ]
 
 

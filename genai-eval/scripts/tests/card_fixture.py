@@ -23,6 +23,11 @@ TEST_SPLIT = [POOL[2], POOL[5]]
 
 DEV_SPLIT = [POOL[0], POOL[3]]
 
+# The sealed protocol Gate 9's content_hash is taken over. It has to exist on
+# disk and the card's hash has to match it, because Gate 9 recomputes rather
+# than trusting the recorded value.
+PROTOCOL = "# Fixture protocol\n\ntemperature 0.0, seeds [0, 1, 2].\n"
+
 
 def _write_jsonl(path, rows):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -123,13 +128,15 @@ def base_card():
     }
 
 
-def write_card(directory, mutate=None, items=None, test_split=None):
+def write_card(directory, mutate=None, items=None, test_split=None,
+               protocol=None):
     """Write a valid card and its pool into `directory`; return the card's path.
 
     `mutate` receives the card dict before it is written. `items` and
-    `test_split` replace the default rows. The test split's sha256 is computed
-    from what is actually written, so Gate 5 passes unless a test breaks it
-    deliberately.
+    `test_split` replace the default rows, `protocol` the sealed protocol text.
+    The test split's sha256 and the protocol's content_hash are both computed
+    from what is actually written, *before* `mutate` runs, so Gates 5 and 9
+    pass unless a test breaks a seal deliberately.
     """
     pool_path = os.path.join(directory, "items", "pool.jsonl")
     test_path = os.path.join(directory, "items", "test.jsonl")
@@ -138,8 +145,14 @@ def write_card(directory, mutate=None, items=None, test_split=None):
     dev_path = os.path.join(directory, "items", "dev.jsonl")
     _write_jsonl(dev_path, DEV_SPLIT)
 
+    protocol_path = os.path.join(directory, "prompts", "v4.md")
+    os.makedirs(os.path.dirname(protocol_path), exist_ok=True)
+    with open(protocol_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(PROTOCOL if protocol is None else protocol)
+
     card = base_card()
     card["items"]["splits"]["test"]["sha256"] = sha256_of(test_path)
+    card["preregistration"]["content_hash"] = "sha256:" + sha256_of(protocol_path)
     if mutate is not None:
         mutate(card)
 
