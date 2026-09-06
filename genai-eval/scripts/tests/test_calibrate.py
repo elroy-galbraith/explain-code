@@ -104,6 +104,59 @@ class TestHappyPath(unittest.TestCase):
         self.assertNotIn("## Agreement", out)
 
 
+class TestTheLevelReachesTheReport(unittest.TestCase):
+    """Whether the level was chosen or assumed has to survive the CLI.
+
+    The argparse option defaults to None so the report can tell the two
+    apart. The effective default must not move with it: a run with no flag
+    still has to compute a nominal alpha, exactly as before.
+    """
+
+    ORDERED = "judge,human\n1,1\n2,3\n3,3\n4,4\n1,2\n4,3\n"
+
+    def test_no_flag_still_computes_nominal_and_says_it_assumed_it(self):
+        path = write_csv(self.ORDERED)
+        code, out, _ = run([path, "--seed", "1", "--resamples", "200"])
+        self.assertEqual(code, 0)
+        self.assertIn("agreement at the nominal measurement level", out)
+        self.assertIn("No measurement level was stated", out)
+
+        stated = run([path, "--level", "nominal", "--seed", "1",
+                      "--resamples", "200"])[1]
+        self.assertNotIn("No measurement level was stated", stated)
+        self.assertEqual(
+            [line for line in out.splitlines()
+             if line.startswith("Judge-human agreement")],
+            [line for line in stated.splitlines()
+             if line.startswith("Judge-human agreement")],
+        )
+
+    def test_a_stated_ordinal_level_is_named_and_uncaveated(self):
+        code, out, _ = run(
+            [write_csv(self.ORDERED), "--level", "ordinal", "--seed", "1",
+             "--resamples", "200"]
+        )
+        self.assertEqual(code, 0)
+        self.assertIn("agreement at the ordinal measurement level", out)
+        self.assertNotIn("No measurement level was stated", out)
+
+    def test_ordinal_and_nominal_do_not_produce_the_same_figure(self):
+        """The caveat would be decorative if the level never moved anything.
+        This fixture is ordered, so the two levels have to disagree."""
+        path = write_csv(self.ORDERED)
+        args = ["--seed", "1", "--resamples", "200"]
+        nominal = run([path] + args)[1]
+        ordinal = run([path, "--level", "ordinal"] + args)[1]
+
+        def alpha(text):
+            for line in text.splitlines():
+                if line.startswith("Judge-human agreement"):
+                    return line.split(":", 1)[1].split(",")[0].strip()
+            raise AssertionError(text)
+
+        self.assertNotEqual(alpha(nominal), alpha(ordinal))
+
+
 class TestOrdinalWords(unittest.TestCase):
     def test_categories_are_passed_through(self):
         code, out, _ = run(

@@ -93,7 +93,10 @@ def main(argv=None):
         "--judge-model", help="The judge's own model name, for the self-preference probe."
     )
     parser.add_argument(
-        "--level", choices=("nominal", "ordinal", "interval"), default="nominal",
+        # Defaulted to None, not to "nominal", so the report can tell a stated
+        # level from an assumed one. The effective default is unchanged: it is
+        # resolved to "nominal" below, before anything reads it.
+        "--level", choices=("nominal", "ordinal", "interval"), default=None,
         help="Measurement level for Krippendorff's alpha (default: nominal).",
     )
     parser.add_argument(
@@ -118,6 +121,13 @@ def main(argv=None):
 
     categories = args.categories.split(",") if args.categories else None
 
+    # Nominal treats every disagreement as equally severe, which is right for
+    # unordered categories and wrong for an ordered rubric. A reader cannot
+    # check a figure without knowing which of the two produced it, so the
+    # report is told both the level and whether the user chose it.
+    level = args.level or "nominal"
+    level_defaulted = args.level is None
+
     try:
         data = loader.load_labels(
             args.labels,
@@ -128,12 +138,12 @@ def main(argv=None):
             generator=args.generator,
         )
 
-        if args.level != "nominal" and categories is None:
+        if level != "nominal" and categories is None:
             if not data.numeric.get(data.judge_column, False):
                 raise ValueError(
                     "--level %s with non-numeric ratings needs --categories to "
                     "state the scale order; sorting labels alphabetically would "
-                    "produce a confident wrong answer" % args.level
+                    "produce a confident wrong answer" % level
                 )
 
         if categories is not None and data.numeric.get(data.judge_column, False):
@@ -181,7 +191,7 @@ def main(argv=None):
         "agreement",
         lambda: analysis.agreement_section(
             data,
-            level=args.level,
+            level=level,
             categories=categories,
             seed=args.seed,
             n_resamples=args.resamples,
@@ -232,6 +242,8 @@ def main(argv=None):
         power_result,
         title=args.title,
         section_errors=errors,
+        level=level,
+        level_defaulted=level_defaulted,
     )
 
     try:

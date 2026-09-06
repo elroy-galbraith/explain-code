@@ -240,6 +240,60 @@ class TestClustersAndProbes(unittest.TestCase):
         self.assertIn("alpha): -", text)
 
 
+class TestMeasurementLevelIsVisible(unittest.TestCase):
+    """A figure whose measurement level a reader cannot see is one they
+    cannot check. Nominal alpha counts a 3-against-4 disagreement exactly as
+    severely as a 1-against-4 one, and on this repo's own worked example that
+    choice moves the headline from 0.865 to 0.642.
+    """
+
+    def build(self, **kwargs):
+        data = make_data([1, 2, 3, 4, 1, 2], {"human": [1, 2, 3, 3, 1, 2]})
+        return report.render(
+            data,
+            analysis.agreement_section(data, seed=1, n_resamples=200),
+            analysis.bias_section(data),
+            analysis.disagreement_clusters(data),
+            analysis.power_section(data),
+            **kwargs
+        )
+
+    def test_the_header_names_the_level(self):
+        self.assertIn(
+            "agreement at the ordinal measurement level",
+            self.build(level="ordinal"),
+        )
+
+    def test_the_header_names_a_defaulted_level_too(self):
+        """Defaulted is not the same as unstated: the header carries the level
+        either way, and the caveat below says who chose it."""
+        header = self.build(level_defaulted=True).splitlines()[2]
+        self.assertIn("agreement at the nominal measurement level", header)
+
+    def test_a_defaulted_level_is_named_in_the_limits(self):
+        text = self.build(level_defaulted=True)
+        limits = text.index("What this report cannot tell you")
+        figures = text.index("Judge-human agreement")
+        note = text.index("No measurement level was stated")
+        self.assertLess(limits, note)
+        self.assertLess(note, figures)
+        self.assertIn("--level ordinal", text)
+        self.assertIn("equally severe", text)
+
+    def test_a_stated_level_carries_no_such_caveat(self):
+        text = self.build(level="ordinal", level_defaulted=False)
+        self.assertNotIn("No measurement level was stated", text)
+        self.assertNotIn("--level ordinal", text)
+
+    def test_a_level_stated_as_nominal_carries_no_caveat_either(self):
+        """The caveat is about an assumption nobody made, not about nominal.
+        Someone who typed --level nominal chose it."""
+        self.assertNotIn(
+            "No measurement level was stated",
+            self.build(level="nominal", level_defaulted=False),
+        )
+
+
 class TestTitle(unittest.TestCase):
     def test_custom_title_is_used(self):
         data = make_data([1, 2], {"human": [1, 2]})

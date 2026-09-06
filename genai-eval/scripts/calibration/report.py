@@ -85,8 +85,17 @@ def _interval(block):
     )
 
 
+DEFAULTED_LEVEL_NOTE = (
+    "No measurement level was stated, so the scale was read as nominal. That "
+    "treats every disagreement as equally severe: a judge one point away from "
+    "the human counts the same as one three points away. If the scale is "
+    "ordered, pass `--level ordinal` and read the agreement figures again."
+)
+
+
 def render(data, agreement_result, bias_result, clusters, power_result,
-           title=None, section_errors=None):
+           title=None, section_errors=None, level="nominal",
+           level_defaulted=False):
     """Assemble the markdown calibration report.
 
     `section_errors` names any section that could not be computed at all.
@@ -95,18 +104,27 @@ def render(data, agreement_result, bias_result, clusters, power_result,
     than infer it from a gap further down. `clusters` is None for the same
     reason: an empty list means the judge and the human never disagreed, which
     is a finding, not a failure.
+
+    `level` is the measurement level the agreement figures were computed at,
+    and `level_defaulted` says whether the user chose it. The distinction
+    matters more than it looks: on this repo's own worked example the same
+    data reads 0.642 at the nominal level and 0.865 at the ordinal one, so a
+    figure whose level a reader cannot see is a figure they cannot check.
     """
     lines = ["# %s" % (title or "Judge calibration report"), ""]
 
     lines += [
-        "Judge column `%s` against %d human rater column(s), %d items."
-        % (data.judge_column, data.human_rater_count, data.n),
+        "Judge column `%s` against %d human rater column(s), %d items, "
+        "agreement at the %s measurement level."
+        % (data.judge_column, data.human_rater_count, data.n, level),
         "",
         "## What this report cannot tell you",
         "",
     ]
     limits = ["**%s**" % error for error in (section_errors or [])]
     limits += list(data.notes) + list(agreement_result["notes"])
+    if level_defaulted:
+        limits.append(DEFAULTED_LEVEL_NOTE)
     if agreement_result["verdict"] not in VERDICT_TEXT:
         limits.append(
             "**Gate 6 is unanswered.** Whether the judge is good enough to "

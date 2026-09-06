@@ -156,10 +156,20 @@ python3 -c "import hashlib,sys; print('sha256:' + hashlib.sha256(open(sys.argv[1
 
 Because `labels/gold.csv` is a real 2-rater gold set rather than a
 placeholder, it demonstrates the two skills (card validation and judge
-calibration) composing on the same eval, not just sitting side by side:
+calibration) composing on the same eval, not just sitting side by side.
+
+`--level ordinal` is load-bearing, not decoration. `rubrics/grounding.md`
+defines a 1-4 groundedness scale whose scores are *ordered*, and Krippendorff's
+alpha at the nominal level treats every disagreement as equally severe -- a
+judge scoring 3 where the human said 4 counts exactly as wrong as one
+scoring 1. Run without the flag, the same gold set reads 0.642 against a
+0.771 ceiling instead of the figures below: the same data, measured as if the
+scale had no order. That is why the report names the level in its header, and
+says so in its limits section when nobody stated one.
 
 ```bash
-python3 genai-eval/scripts/calibrate.py genai-eval/examples/rag-grounding/labels/gold.csv --seed 7
+python3 genai-eval/scripts/calibrate.py \
+  genai-eval/examples/rag-grounding/labels/gold.csv --level ordinal --seed 7
 ```
 
 Real output:
@@ -167,7 +177,7 @@ Real output:
 ```
 # Judge calibration report
 
-Judge column `judge_score` against 2 human rater column(s), 12 items.
+Judge column `judge_score` against 2 human rater column(s), 12 items, agreement at the ordinal measurement level.
 
 ## What this report cannot tell you
 
@@ -179,9 +189,9 @@ Judge column `judge_score` against 2 human rater column(s), 12 items.
 
 ## Agreement
 
-Judge-human agreement (Krippendorff's alpha): 0.642, 95% CI [0.207, 1.000], n = 12
+Judge-human agreement (Krippendorff's alpha): 0.865, 95% CI [0.541, 1.000], n = 12
 
-Human-human agreement, the ceiling: 0.771, 95% CI [0.392, 1.000], n = 12
+Human-human agreement, the ceiling: 0.894, 95% CI [0.611, 1.000], n = 12
 
 The judge falls below the ceiling. Humans agree with each other more than the judge agrees with them, so automating this rubric costs measurable accuracy.
 
@@ -207,7 +217,7 @@ Biggest first. These are counts, not causes; name each pattern yourself by readi
 | 3.0 | 4.0 | 1 | 0.33 | i10 |
 ```
 
-**Headline figure:** judge-human agreement is 0.642 against a 0.771
+**Headline figure:** judge-human agreement is 0.865 against a 0.894
 human-human ceiling (both n = 12) -- the judge falls below the ceiling, and
 at n = 12 (a deliberately small worked-example gold set, not a production
 one) the confidence intervals are wide enough that this should be read as "a
