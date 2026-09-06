@@ -1,9 +1,68 @@
 # genai-eval
 
-Qualify a GenAI evaluation as a measurement instrument, before trusting its
-numbers. This plugin ships `eval-qualify`: a skill and a stdlib-only CLI that
-tell you whether an LLM judge agrees with humans well enough to automate a
-decision — and, just as often, tell you that your data cannot answer that yet.
+Design and qualify a GenAI evaluation as a measurement instrument, before
+trusting its numbers. This plugin ships two skills. `eval-design` designs an
+evaluation before it produces a single score — naming the decision it
+serves, defining a falsifiable construct, and sealing the result into a
+machine-checkable `eval-card.json`. `eval-qualify` is a stdlib-only CLI that
+tells you whether an LLM judge agrees with humans well enough to automate a
+decision — and, just as often, tells you that your data cannot answer that
+yet.
+
+**The two skills are not wired together.** `eval-qualify` has no card mode:
+it cannot read an `eval-card.json`, and there is no `qualification` block for
+it to write back. See "What this plugin does not do yet" below.
+
+## What `eval-design` does
+
+It walks a six-step process — name the decision and an action for every
+outcome, model the domain and rank harm pathways, define a falsifiable
+construct, operationalise it into claims/evidence/tasks, build a
+contamination-controlled item pool with a sealed test split, and
+preregister the protocol and threshold — and writes the result into an
+`eval-card.json`. Full field-by-field process in
+[`skills/eval-design/SKILL.md`](skills/eval-design/SKILL.md); the card's
+shape is documented in
+[`templates/eval-card.schema.md`](templates/eval-card.schema.md).
+
+The card is checked by `scripts/check_eval_card.py`, a stdlib-only validator
+that answers six of the SOP's eleven gates mechanically, because **a gate
+that cannot be checked mechanically will be rubber-stamped** — asking a
+model "does this construct trace to a ranked harm pathway?" gets you an
+opinion, not a check:
+
+| Gate | Question | What the script checks |
+|---|---|---|
+| 1 | Named owner + action per outcome | `decision.owner` non-empty; pass/fail/borderline all present |
+| 2 | Measures trace to ranked pathways | every construct references an `hp*` that has a `rank` |
+| 3 | Falsifiable construct | `negative_evidence` non-empty |
+| 4 | Every item maps to a claim, every claim has 3+ items | orphan and thin-claim scan across pool and card |
+| 5 | Test split sealed and uncontaminated | recorded sha256 re-verified against the file; canary present |
+| 9 | Threshold set before the run | prereg `content_hash` and `sealed_at` predate every result timestamp |
+
+Run it against the worked example:
+
+```bash
+python3 genai-eval/scripts/check_eval_card.py \
+  genai-eval/examples/rag-grounding/eval-card.json
+```
+
+Real output:
+
+```
+genai-eval/examples/rag-grounding/eval-card.json: 0 error(s), 1 warning(s)
+
+  WARNING [Gate 2] domain.harm_pathways[2]: pathway 'hp3' is ranked but no construct measures it
+
+Gates 6, 7, 8, 10 and 11 need a qualification block and are not checked here.
+```
+
+Exit code `0`. The warning is deliberate, not a bug in the example — see
+[`examples/rag-grounding/README.md`](examples/rag-grounding/README.md) for
+why that harm pathway is ranked but intentionally not measured by this card.
+`--format json` gives machine-readable findings, each with a gate number and
+a JSON path; `--warnings-as-errors` treats a warning as a failure for CI that
+wants zero of either.
 
 ## What `eval-qualify` does
 
@@ -27,7 +86,7 @@ setup, no dependencies beyond the Python standard library:
   pattern behind a cluster; that takes reading the actual items, which is a
   human's job, not the tool's.
 
-## Run it
+## Run eval-qualify
 
 ```bash
 python3 genai-eval/scripts/calibrate.py \
@@ -84,14 +143,33 @@ that" than to produce a number that outruns what the sample supports:
   humans shows the judge reproduces their judgments consistently — not that
   either is right. A judge agreeing with humans who are mistaken is still
   wrong.
+- **A gate that cannot be checked mechanically will be rubber-stamped.**
+  That is why six of the eleven SOP gates are checked by a script
+  (`check_eval_card.py`, see above) rather than asked of a model, and why
+  the remaining five are named below instead of being quietly assumed.
 
 ## What this plugin does not do yet
 
-`eval-qualify` qualifies an evaluation that already produces scores. It does
-not design one. Choosing a construct, writing a rubric, building an item
-pool, and sealing a test split is `eval-design` — Phase 2 of this plugin,
-not built yet. If you're starting from nothing, this skill has nothing to
-run until you have judge scores and human labels to feed it.
+`eval-qualify` qualifies an evaluation that already produces scores; it does
+not design one, and `eval-design` designs an evaluation but cannot measure
+whether one performs. Between them, five of the eleven SOP gates are not
+computed by anything that ships:
+
+- **Gates 6, 7, 8, 10 and 11 need a `qualification` block that does not
+  exist.** `check_eval_card.py` checks Gates 1, 2, 3, 4, 5 and 9 only — it
+  has no code path for the other five. `eval-qualify` computes agreement,
+  power and bias figures that speak to some of those gates, but it has no
+  card mode: it cannot open an `eval-card.json`, read the `grader` block
+  `eval-design` writes, or append a `qualification` block back onto the
+  card. The bridge today is manual — export judge scores and human labels
+  into the CSV `eval-qualify` expects and hand it that file directly (see
+  [`examples/rag-grounding/README.md`](examples/rag-grounding/README.md)
+  for a worked handoff) — and nothing produced that way is recorded in the
+  card itself.
+- If you're starting from nothing, run `eval-design` first; it has a
+  process for exactly that. If you already have judge scores and human
+  labels and no card, `eval-qualify` has something to run today; it just
+  won't write its answer back into one.
 
 ## Tests
 

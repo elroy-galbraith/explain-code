@@ -59,19 +59,27 @@ pass when non-native readers are in the audience.
 in a repo — grounded in its real code and recorded numbers — for when someone
 needs to *inhabit* a system rather than read about it.
 
-`genai-eval` qualifies a GenAI evaluation as a measurement instrument, before
-its numbers get trusted. Its `eval-qualify` skill runs a stdlib-only CLI over a
-CSV of judge scores and human labels and reports chance-corrected agreement
-against the human-human ceiling (not just the judge's own number), a power
-check against a stated minimum interesting difference, judge bias probes
-(length and self-preference), and disagreement clusters for a human to name. It is deliberately more willing to report "this
-data cannot answer that" than to hand back a confident number the sample
-doesn't support — with only one human rater, for instance, there is no ceiling
-to compare against, and the report says so before any agreement figure. High
-agreement shows the judge reproduces human judgments, not that they are right;
-a judge agreeing with mistaken humans is still wrong. It qualifies evaluations
-that already produce scores; designing one from scratch (`eval-design`) is a
-later phase and doesn't exist yet.
+`genai-eval` designs and qualifies a GenAI evaluation as a measurement
+instrument. Its `eval-design` skill designs one before it produces a single
+score — naming the decision it serves, defining a falsifiable construct,
+building a contamination-controlled item pool, and sealing the result into a
+machine-checkable `eval-card.json` that `check_eval_card.py`, a stdlib-only
+validator, holds to six mechanical gates (a gate a model only asserted rather
+than a script checked would be the rubber stamp this plugin exists to avoid).
+Its `eval-qualify` skill runs a stdlib-only CLI over a CSV of judge scores and
+human labels and reports chance-corrected agreement against the human-human
+ceiling (not just the judge's own number), a power check against a stated
+minimum interesting difference, judge bias probes (length and
+self-preference), and disagreement clusters for a human to name. It is
+deliberately more willing to report "this data cannot answer that" than to
+hand back a confident number the sample doesn't support — with only one human
+rater, for instance, there is no ceiling to compare against, and the report
+says so before any agreement figure. High agreement shows the judge
+reproduces human judgments, not that they are right; a judge agreeing with
+mistaken humans is still wrong. **The two skills are not wired together yet:**
+`eval-qualify` has no card mode, so Gates 6, 7, 8, 10 and 11 — the ones that
+need real results rather than just a well-formed design — are not computed
+by anything that ships.
 
 ## Install
 
@@ -128,14 +136,23 @@ microworld/                         # the microworld plugin
     └── scripts/                    # DOM stub and screenshot helpers
 genai-eval/                         # the genai-eval plugin
 ├── .claude-plugin/plugin.json      # plugin manifest
-├── skills/eval-qualify/
-│   └── SKILL.md                    # the skill instructions (gates, process, honesty rules)
+├── skills/
+│   ├── eval-design/
+│   │   └── SKILL.md                # the skill instructions (six-step process, tier routing)
+│   └── eval-qualify/
+│       └── SKILL.md                # the skill instructions (gates, process, honesty rules)
+├── templates/
+│   ├── eval-card.schema.md         # the eval card's field-by-field shape
+│   └── eval-card.template.json     # a blank card to copy
 ├── scripts/
-│   ├── calibrate.py                # CLI entry point
+│   ├── calibrate.py                # eval-qualify CLI entry point
+│   ├── check_eval_card.py          # eval-design's validator CLI entry point
 │   ├── calibration/                # CSV loading, analysis orchestration, report rendering
+│   ├── card/                       # eval card loading + the six mechanical gates
 │   ├── evalstats/                  # stdlib-only statistics: agreement, items, power, bias, saturation
-│   └── tests/                      # 218 tests, one suite per module
-└── examples/judge-calibration/     # worked example: labels.csv + README walkthrough
+│   └── tests/                      # 344 tests, one suite per module
+├── examples/judge-calibration/     # worked example: labels.csv + README walkthrough
+└── examples/rag-grounding/         # worked example: a full eval card that validates clean
 ```
 
 `humanizer` isn't a directory here — it's referenced live from its upstream repo.
@@ -224,6 +241,21 @@ Standard library only. Its test suites run the same way:
 ```bash
 python3 -m unittest discover -s genai-eval/scripts/tests -p "test_*.py"
 ```
+
+## Try the card validator directly
+
+```bash
+python3 genai-eval/scripts/check_eval_card.py \
+  genai-eval/examples/rag-grounding/eval-card.json
+```
+
+It reports every gate violation in one pass, each with a JSON path and a gate
+number. `--format json` for machine-readable output. Standard library only.
+The worked example validates clean at `0 error(s), 1 warning(s)` (exit code
+`0`) — the warning is a deliberate, documented one, not a bug; see
+[`genai-eval/examples/rag-grounding/README.md`](genai-eval/examples/rag-grounding/README.md).
+It checks Gates 1, 2, 3, 4, 5 and 9 only — Gates 6, 7, 8, 10 and 11 need a
+`qualification` block that `eval-qualify` does not yet write.
 
 ## Credits
 

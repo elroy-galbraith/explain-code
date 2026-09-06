@@ -1,7 +1,7 @@
 {
   "name": "genai-eval",
   "version": "0.1.0",
-  "description": "Qualify a GenAI evaluation as a measurement instrument. Ships eval-qualify: judge-human agreement with bootstrap confidence intervals read against the human-human ceiling, judge bias probes for length, position, self-preference and prompt sensitivity, a power check against a stated minimum detectable effect, and an observed disagreement taxonomy — all on a stdlib-only statistics toolkit. Runs standalone on a CSV of judge scores and human labels. eval-design and the machine-readable eval card are planned, not yet built.",
+  "description": "Design and qualify a GenAI evaluation as a measurement instrument. Ships two skills. eval-design names the decision, defines a falsifiable construct, builds a contamination-controlled item pool, and seals an eval-card.json; a stdlib-only validator (check_eval_card.py) holds that card to six mechanical gates (1, 2, 3, 4, 5, 9). eval-qualify measures judge-human agreement with bootstrap confidence intervals read against the human-human ceiling, judge bias probes for length, position, self-preference and prompt sensitivity, a power check against a stated minimum detectable effect, and an observed disagreement taxonomy — all on a stdlib-only statistics toolkit — running standalone on a CSV of judge scores and human labels. What remains: eval-qualify has no card mode and there is no qualification block, so Gates 6, 7, 8, 10 and 11 are not computed by anything that ships yet.",
   "author": {
     "name": "Elroy Galbraith"
   },

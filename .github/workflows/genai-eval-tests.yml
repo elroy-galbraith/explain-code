@@ -73,3 +73,34 @@ jobs:
             > one-rater.md
           grep -q "Gate 6" one-rater.md
           grep -q "no human-human ceiling" one-rater.md
+
+      - name: Verify the worked card passes every checkable gate
+        run: |
+          set -euo pipefail
+          python3 genai-eval/scripts/check_eval_card.py \
+            genai-eval/examples/rag-grounding/eval-card.json > card-check.txt
+          cat card-check.txt
+          # Exit 0 alone would pass if a future refactor returned early
+          # before running a gate, so pin the tool's own summary line to the
+          # exact counts this card is documented to produce: this example
+          # carries one deliberate Gate 2 warning (a ranked harm pathway
+          # nothing in the card measures -- see
+          # examples/rag-grounding/README.md), not a clean report with none.
+          # Zero errors and that one named warning is what "every checkable
+          # gate passes" looks like for this card.
+          grep -q "0 error(s), 1 warning(s)" card-check.txt
+          grep -q "WARNING \[Gate 2\]" card-check.txt
+
+      - name: Verify a tampered test split fails Gate 5
+        run: |
+          set -euo pipefail
+          cp genai-eval/examples/rag-grounding/items/test.jsonl /tmp/test.jsonl.bak
+          echo '{"item_id": "tamper", "claim_id": "cl1"}' \
+            >> genai-eval/examples/rag-grounding/items/test.jsonl
+          if python3 genai-eval/scripts/check_eval_card.py \
+               genai-eval/examples/rag-grounding/eval-card.json > /tmp/out.txt; then
+            echo "Gate 5 did not fire on a tampered split" >&2
+            exit 1
+          fi
+          grep -q "Gate 5" /tmp/out.txt
+          cp /tmp/test.jsonl.bak genai-eval/examples/rag-grounding/items/test.jsonl
