@@ -38,7 +38,7 @@ opinion, not a check:
 | 3 | Falsifiable construct | `negative_evidence` non-empty |
 | 4 | Every item maps to a claim, every claim has 3+ items | orphan and thin-claim scan across pool and card |
 | 5 | Test split sealed and uncontaminated | recorded sha256 re-verified against the file; canary present |
-| 9 | Threshold set before the run | prereg `content_hash` and `sealed_at` predate every result timestamp |
+| 9 | Threshold set before the run | prereg `content_hash` recomputed over the named protocol file and re-verified; `sealed_at` parseable and predating every result timestamp |
 
 Run it against the worked example:
 

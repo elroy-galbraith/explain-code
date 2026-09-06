@@ -160,7 +160,7 @@ them — see Gate 6 below.
 | `mode` | string | Recommended | Grading mode (e.g. `pairwise`, `pointwise`) | Gate 6 (not implemented this phase) |
 | `rubric_ref` | string (path, card-relative) | Recommended | Pointer to the grading rubric | Gate 6 (not implemented this phase) |
 | `gold_set` | string (path, card-relative) | Recommended | Held-out human-labeled set used for calibration | Gate 6 (not implemented this phase) |
-| `bias_probes[]` | array of strings | Recommended | Which bias probes run (e.g. `position`, `length`, `verbosity`, `self_preference`, `prompt_sensitivity`) | Gate 6 (not implemented this phase) |
+| `bias_probes[]` | array of strings | Recommended | Which bias probes run (e.g. `position`, `length`, `self_preference`, `prompt_sensitivity`) | Gate 6 (not implemented this phase) |
 
 ## `preregistration` — Gate 9
 

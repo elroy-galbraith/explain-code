@@ -20,7 +20,7 @@ They are coupled by one machine-readable artifact, the **eval card**
 (`eval-card.json`), and share a stdlib-only statistics toolkit.
 
 The design's organising commitment: **a gate that cannot be checked
-mechanically will be rubber-stamped.** Nine of the eleven gates are therefore
+mechanically will be rubber-stamped.** Ten of the eleven gates are therefore
 bound to either a validator or a computation. Only Gate 8 remains judgement,
 and the tooling labels that honestly rather than hiding it.
 
@@ -103,7 +103,7 @@ as `templates/eval-card.schema.md`:
     "kind": "llm_judge",
     "mode": "pairwise",
     "gold_set": "labels/gold.csv",
-    "bias_probes": ["position", "length", "verbosity", "self_preference", "prompt_sensitivity"]
+    "bias_probes": ["position", "length", "self_preference", "prompt_sensitivity"]
   },
   "preregistration": {
     "sealed_at": "2026-09-05T10:00:00Z",
@@ -136,7 +136,7 @@ monitoring state.
 | 6 | Judge-human agreement reaches the human-human ceiling | Computed | Krippendorff alpha with bootstrap CIs, compared |
 | 7 | Instrument detects the MDE | Computed | power calculation vs. actual item count |
 | 8 | Criterion evidence on a real sample | Judgement | validator requires a non-empty block with an `n` and a held-out ref; otherwise emits the "proxy of unknown quality" label |
-| 9 | Threshold set before the run | Mechanical | prereg `content_hash` and `sealed_at` predate every result timestamp |
+| 9 | Threshold set before the run | Mechanical | prereg `content_hash` recomputed over the named protocol file and re-verified; `sealed_at` parseable and predating every result timestamp |
 | 10 | Result crosses the threshold | Computed | decision rule applied to the CI, not the point estimate |
 | 11 | Saturated or leaked | Computed | ceiling proportion; canary hit rate |
 

@@ -219,11 +219,15 @@ at all, rather than a claim the author makes about their own timing.
 **Fields:** `preregistration.sealed_at`, `content_hash`,
 `protocol.prompts_ref/seeds/temperature/elicitation_budget`, `baselines[]`,
 `threshold.metric/minimum_interesting_difference/decision_rule`. **Gate:** 9
-— `sealed_at` and `content_hash` both present, and, once results exist,
-predating every result timestamp. The `grader` block
-(`kind/model/mode/rubric_ref/gold_set/bias_probes`) is also written in this
-step, but no gate in this phase reads it mechanically — it exists so
-`eval-qualify` can run calibration against it later, which is Gate 6.
+— `sealed_at` parseable, and `content_hash` recomputed over the protocol
+file the card names and matched against the recorded one, so an edited
+protocol fails the gate rather than passing on a hash nobody rechecked. Once
+results exist, the seal must predate every result timestamp.
+
+The `grader` block (`kind/model/mode/rubric_ref/gold_set/bias_probes`) is also
+written in this step, but no gate in this phase reads it mechanically — it
+exists so `eval-qualify` can run calibration against it later, which is
+Gate 6.
 
 ## Validate the card, and report what it says
 

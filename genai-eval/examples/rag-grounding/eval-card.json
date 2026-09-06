@@ -161,7 +161,7 @@
     "mode": "pointwise",
     "rubric_ref": "rubrics/grounding.md",
     "gold_set": "labels/gold.csv",
-    "bias_probes": ["length", "verbosity"]
+    "bias_probes": ["length"]
   },
   "preregistration": {
     "sealed_at": "2026-09-06T09:00:00Z",
