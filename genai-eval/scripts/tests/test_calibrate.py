@@ -285,10 +285,11 @@ class TestNumericCategories(unittest.TestCase):
 
 
 class TestConsoleEncoding(unittest.TestCase):
-    def test_a_legacy_codepage_degrades_a_character_not_the_report(self):
-        """The report carries an em dash, which cp437 cannot encode. Printing
-        it used to raise UnicodeEncodeError and lose the whole report; the
-        error handler alone turns that into a "?"."""
+    def test_the_ordinary_report_is_encodable_on_a_legacy_codepage(self):
+        """The report must remain ASCII-encodable. This test catches non-ASCII
+        characters arriving through computed values, complementing the static
+        literal checker in test_ascii_output.py. The dynamic path is otherwise
+        invisible to source inspection."""
         path = write_csv(ONE_RATER)
         environment = dict(os.environ, PYTHONIOENCODING="cp437")
         finished = subprocess.run(
