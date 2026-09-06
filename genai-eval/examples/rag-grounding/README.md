@@ -83,8 +83,10 @@ see "The pathway we chose not to measure" below.
 The other two claims trace the same way: `cl1` (`c_grounding` -> `hp1`,
 unsupported assertions, e.g. item `i04` asking a max-file-size question
 against a single supporting chunk) and `cl2` (`c_grounding` -> `hp1`,
-decline-vs-fabricate under insufficient context, e.g. item `i07` asking about
-same-computer seat limits that the retrieved chunk never addresses).
+decline-vs-fabricate under insufficient context, e.g. item `i07` asking
+whether a sixth seat can be bought for the Family plan for an extra fee,
+against the same chunk used elsewhere to state what the plan includes --
+which says nothing at all about buying more).
 
 ## The pathway we chose not to measure
 
@@ -250,7 +252,7 @@ Real output:
 genai-eval/examples/rag-grounding/eval-card.json: 1 error(s), 1 warning(s)
 
   WARNING [Gate 2] domain.harm_pathways[2]: pathway 'hp3' is ranked but no construct measures it
-  ERROR [Gate 5] items.splits.test.sha256: the test split has changed since it was sealed (recorded 43e17b00473f..., found 413c9b411418...); every number computed from it measures something other than what was sealed
+  ERROR [Gate 5] items.splits.test.sha256: the test split has changed since it was sealed (recorded e68d01166ff1..., found 11c38a6c22f9...); every number computed from it measures something other than what was sealed
 
 Gates 6, 7, 8, 10 and 11 need a qualification block and are not checked here.
 ```
@@ -259,7 +261,7 @@ Exit code: `1`. The hash is over the file's raw bytes, so this fires on a
 single appended line -- no JSON parsing, no semantic diff, nothing that could
 be fooled by reformatting the same items. We then restored `items/test.jsonl`
 to the exact sealed content (the 4 lines above, byte-for-byte -- confirmed by
-recomputing the hash, which matched `43e17b00473f95d273ecc7c24df670638e79ed77708e807607fcf5030c3eee44`
+recomputing the hash, which matched `e68d01166ff1d37be56b74ae4d85474311f3935b361fb785b65ce8a737be40a4`
 again) and re-ran the validator:
 
 ```
