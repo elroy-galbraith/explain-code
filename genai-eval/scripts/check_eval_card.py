@@ -34,7 +34,30 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from card import gates, loader
 
 
+def _tolerate_unencodable_output():
+    """Degrade rather than die when the console cannot encode a character.
+
+    The text in a card or a CSV belongs to whoever wrote it: an em dash in a
+    construct name, an accent in an owner's name. On a legacy Windows console
+    (cp850, cp437) a strict encoder raises UnicodeEncodeError partway through
+    the report and the run ends in a traceback, leaving the user unable to tell
+    whether their input or the tool is at fault.
+
+    This sets only the *error handler*. The console's encoding is untouched, so
+    everything it can already render still renders identically; only a genuinely
+    unencodable character becomes a visible escape.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError, OSError):
+            # A StringIO under test, or a stream that does not support it.
+            # Nothing here is worth failing a run over.
+            pass
+
+
 def main(argv=None):
+    _tolerate_unencodable_output()
     parser = argparse.ArgumentParser(
         description="Check an eval card against the gates a script can answer, "
         "and report every violation in one pass."

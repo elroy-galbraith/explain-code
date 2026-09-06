@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -118,6 +119,49 @@ class TestUnreadableCard(unittest.TestCase):
         code, out, _ = run([path])
         self.assertEqual(code, 1)
         self.assertIn("structure", out.lower())
+
+
+class TestUnencodableConsole(unittest.TestCase):
+    """The card's text belongs to its author, not to us, so it can contain
+    anything. On a legacy Windows console a strict encoder turns that into a
+    traceback halfway through the report."""
+
+    def _card_with_an_em_dash(self):
+        directory = tempfile.mkdtemp()
+        path = write_card(
+            directory,
+            mutate=lambda c: c["constructs"][0].update(negative_evidence=[]))
+        with open(path, encoding="utf-8") as handle:
+            card = json.load(handle)
+        card["constructs"][0]["id"] = "grounding — v2"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(card, handle, ensure_ascii=False)
+        return path
+
+    def test_a_console_that_cannot_encode_the_card_does_not_crash_the_run(self):
+        script = os.path.join(os.path.dirname(HERE), "check_eval_card.py")
+        environment = dict(os.environ, PYTHONIOENCODING="cp850")
+        result = subprocess.run(
+            [sys.executable, script, self._card_with_an_em_dash()],
+            capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertNotIn("UnicodeEncodeError", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        # The gate finding still has to arrive, in whatever form the console
+        # can show. This is the point: degraded, not lost.
+        self.assertIn("Gate 3", result.stdout)
+        self.assertIn("grounding", result.stdout)
+
+    def test_the_same_card_on_a_utf8_console_keeps_the_character_intact(self):
+        """Degrading on cp850 must not mean degrading everywhere. A console
+        that can render the em dash still gets the em dash."""
+        script = os.path.join(os.path.dirname(HERE), "check_eval_card.py")
+        environment = dict(os.environ, PYTHONIOENCODING="utf-8")
+        result = subprocess.run(
+            [sys.executable, script, self._card_with_an_em_dash()],
+            capture_output=True, text=True, encoding="utf-8", env=environment)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("grounding — v2", result.stdout)
 
 
 if __name__ == "__main__":

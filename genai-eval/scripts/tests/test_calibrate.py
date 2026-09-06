@@ -56,6 +56,23 @@ def write_csv(text):
     return handle.name
 
 
+def write_utf8_csv(text):
+    """Like write_csv, but explicit about the encoding.
+
+    write_csv relies on the platform's default text encoding, which is fine
+    for the ASCII fixtures every other test uses. loader.py reads every CSV as
+    utf-8, so a fixture that deliberately carries a non-ASCII character (an
+    item id with an em dash) has to be written as utf-8 too, or it never
+    reaches the loader intact regardless of what calibrate.py does with it.
+    """
+    handle = tempfile.NamedTemporaryFile(
+        "w", suffix=".csv", delete=False, newline="", encoding="utf-8"
+    )
+    handle.write(text)
+    handle.close()
+    return handle.name
+
+
 def run(args):
     out, err = io.StringIO(), io.StringIO()
     with redirect_stdout(out), redirect_stderr(err):
@@ -284,6 +301,28 @@ class TestConsoleEncoding(unittest.TestCase):
         self.assertIn(
             "Judge-human agreement", finished.stdout.decode("cp437", "replace")
         )
+
+
+class TestUnencodableConsole(unittest.TestCase):
+    """An item id belongs to whoever exported the CSV, not to us, so it can
+    contain anything. This must not crash on a console that cannot encode it."""
+
+    EM_DASH_LABELS = (
+        "item_id,human_a,human_b,judge\n"
+        "i1,1,1,1\ni2,1,1,1\ni3,2,2,2\ni4,2,2,2\n"
+        "grounding—v2,1,2,2\ni6,2,2,2\ni7,1,1,1\ni8,2,1,2\n"
+    )
+
+    def test_a_console_that_cannot_encode_an_item_id_does_not_crash_the_run(self):
+        path = write_utf8_csv(self.EM_DASH_LABELS)
+        environment = dict(os.environ, PYTHONIOENCODING="cp850")
+        result = subprocess.run(
+            [sys.executable, CALIBRATE, path, "--seed", "1", "--resamples", "200"],
+            capture_output=True, text=True, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("UnicodeEncodeError", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn("Judge-human agreement", result.stdout)
 
 
 class TestMid(unittest.TestCase):
