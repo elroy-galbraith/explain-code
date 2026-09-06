@@ -37,6 +37,26 @@ class TestValidCard(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("no findings", out.lower())
 
+    def test_a_clean_report_still_names_the_gates_it_did_not_check(self):
+        """The clean output is the one most likely to be pasted into a review
+        as evidence that an eval is sound, so it is the one that must not
+        omit the sentence saying five gates were never examined."""
+        _, clean, _ = run([write_card(tempfile.mkdtemp())])
+        caveat = "Gates 6, 7, 8, 10 and 11 need a qualification block"
+        self.assertIn(caveat, clean)
+
+        with_findings = run([write_card(
+            tempfile.mkdtemp(),
+            mutate=lambda c: c["decision"].pop("owner"))])[1]
+        self.assertIn(caveat, with_findings)
+
+    def test_the_caveat_is_absent_from_machine_readable_output(self):
+        """It is prose for a reader. The json branch carries the gate numbers
+        in its findings, and a stray sentence there would not parse."""
+        _, out, _ = run([write_card(tempfile.mkdtemp()), "--format", "json"])
+        self.assertNotIn("need a qualification block", out)
+        json.loads(out)
+
 
 class TestFailingCard(unittest.TestCase):
     def test_a_gate_failure_exits_one_and_names_the_gate(self):

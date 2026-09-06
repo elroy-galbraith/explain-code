@@ -247,6 +247,22 @@ def _read_pool(path):
     return rows, findings
 
 
+DUPLICATE_LINES_SHOWN = 5
+
+
+def _line_list(numbers, limit=DUPLICATE_LINES_SHOWN):
+    """Name the repeated lines, but never more than a reader can use.
+
+    A pool where one id is pasted five hundred times has to stay one finding
+    on one line, so the tail is counted rather than listed.
+    """
+    shown = ", ".join(str(n) for n in numbers[:limit])
+    label = "line " if len(numbers) == 1 else "lines "
+    if len(numbers) > limit:
+        return label + shown + " and %d more" % (len(numbers) - limit)
+    return label + shown
+
+
 def gate_4_trace_matrix(card, card_path):
     """Gate 4: does every item trace to a claim, and every claim to 3+ items?
 
@@ -325,6 +341,7 @@ def gate_4_trace_matrix(card, card_path):
     # two rows sharing an id are ambiguous about which item a score belongs to
     # however they are counted afterwards.
     first_seen = {}
+    repeats = {}
     for number, row in rows:
         item_id = row.get("item_id") if isinstance(row, dict) else None
         if _blank(item_id):
@@ -337,15 +354,24 @@ def gate_4_trace_matrix(card, card_path):
             ))
             continue
         if item_id in first_seen:
-            findings.append(Finding(
-                "error", "items.source",
-                "item_id %r on line %d is already used on line %d; two rows "
-                "sharing an id are ambiguous about which item a score belongs "
-                "to" % (item_id, number, first_seen[item_id]),
-                gate=4,
-            ))
+            repeats.setdefault(item_id, []).append(number)
         else:
             first_seen[item_id] = number
+
+    # One finding per duplicated id, not one per repeated row. An id pasted
+    # five hundred times is one violation, and this tool's contract is that a
+    # card gets fixed once rather than once per run - which four hundred and
+    # ninety-nine near-identical lines defeat by burying every other finding.
+    for item_id, lines in sorted(repeats.items(), key=lambda e: first_seen[e[0]]):
+        findings.append(Finding(
+            "error", "items.source",
+            "item_id %r first appears on line %d and is repeated on %d "
+            "further row%s (%s); two rows sharing an id are ambiguous about "
+            "which item a score belongs to"
+            % (item_id, first_seen[item_id], len(lines),
+               "" if len(lines) == 1 else "s", _line_list(lines)),
+            gate=4,
+        ))
 
     # Count *distinct* item ids per claim, not rows. Three copies of one item
     # carry no more claim-level information than one copy, so counting rows

@@ -101,8 +101,12 @@ def main(argv=None):
                   % (args.card, len(errors), len(warnings)))
             for finding in findings:
                 print("  " + finding.render())
-            print("\nGates 6, 7, 8, 10 and 11 need a qualification block and "
-                  "are not checked here.")
+        # Both branches, not only the one carrying findings. A clean report is
+        # the output most likely to be pasted into a review as evidence that
+        # an eval is sound, so it is the last place that should omit the
+        # sentence saying five gates were never examined.
+        print("\nGates 6, 7, 8, 10 and 11 need a qualification block and "
+              "are not checked here.")
 
     return 1 if errors or (warnings and args.warnings_as_errors) else 0
 

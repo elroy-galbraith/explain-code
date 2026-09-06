@@ -136,6 +136,27 @@ class TestGate2HarmPathways(unittest.TestCase):
         ])
         self.assertIn("hp_nope", findings[0].message)
 
+    def test_a_non_string_pathway_id_is_not_matchable(self):
+        """The schema requires these ids to be strings, and the id lookup
+        filters to strings for that reason -- so a pathway written {"id": 5}
+        is not a pathway any construct can trace to, and the construct
+        referencing it reports an unknown pathway rather than resolving.
+
+        Pinned because nothing else does: the filter is one isinstance call,
+        and a future edit that dropped it would restore the silent match with
+        no test to notice.
+        """
+        def mutate(card):
+            card["domain"]["harm_pathways"][0]["id"] = 5
+            card["constructs"][0]["harm_pathways"] = [5]
+
+        findings = run_gate(gates.gate_2_harm_pathways, mutate)
+        self.assertEqual([(f.level, f.path) for f in findings], [
+            ("error", "constructs[0].harm_pathways"),
+            ("warning", "domain.harm_pathways[0]"),
+        ])
+        self.assertIn("unknown pathway 5", findings[0].message)
+
     def test_an_unranked_pathway_fires(self):
         """An unranked pathway justifies measuring anything. The ranking is the
         part that makes the trace mean something."""
@@ -441,8 +462,56 @@ class TestGate4TraceMatrix(unittest.TestCase):
         findings = self._run(items=items)
         self.assertEqual([f.path for f in findings],
                          ["items.source", "items.source"])
-        self.assertIn("already used", findings[0].message)
+        self.assertIn("is repeated on", findings[0].message)
         self.assertIn("ghost", findings[1].message)
+
+    def test_one_id_repeated_a_hundred_times_is_one_finding(self):
+        """A linter reports a violation once. One id pasted a hundred times is
+        one violation, not a hundred and one, and the wall of near-identical
+        lines buries the findings a reader came for -- here, the two thin
+        claims that are the real problem with this pool."""
+        items = [{"item_id": "x", "claim_id": "cl1"}] * 50
+        items += [{"item_id": "x", "claim_id": "cl2"}] * 50
+        findings = self._run(items=items)
+
+        duplicates = [f for f in findings if f.path == "items.source"]
+        self.assertEqual(len(duplicates), 1, [f.message for f in duplicates])
+        self.assertEqual(duplicates[0].level, "error")
+        self.assertEqual(duplicates[0].gate, 4)
+        self.assertIn("'x'", duplicates[0].message)
+        self.assertIn("first appears on line 1", duplicates[0].message)
+        self.assertIn("99 further rows", duplicates[0].message)
+
+        # The findings the reader actually needs are still there, and still
+        # readable beside a single duplicate line.
+        self.assertEqual([f.path for f in findings if f.path != "items.source"],
+                         ["claims[0]", "claims[1]"])
+
+    def test_two_duplicated_ids_produce_two_findings(self):
+        """Collapsing is per id, not per pool: two distinct ids repeated are
+        two separate things to fix."""
+        items = [{"item_id": "i1", "claim_id": "cl1"},
+                 {"item_id": "i2", "claim_id": "cl1"},
+                 {"item_id": "i3", "claim_id": "cl1"},
+                 {"item_id": "i1", "claim_id": "cl1"},
+                 {"item_id": "i4", "claim_id": "cl2"},
+                 {"item_id": "i5", "claim_id": "cl2"},
+                 {"item_id": "i6", "claim_id": "cl2"},
+                 {"item_id": "i4", "claim_id": "cl2"}]
+        duplicates = [f for f in self._run(items=items)
+                      if f.path == "items.source"]
+        self.assertEqual(len(duplicates), 2, [f.message for f in duplicates])
+        self.assertIn("'i1'", duplicates[0].message)
+        self.assertIn("'i4'", duplicates[1].message)
+
+    def test_the_repeated_lines_are_named_but_the_list_is_bounded(self):
+        """The line numbers are the handle for fixing the pool, so a few are
+        named; the tail is counted so one finding stays one line."""
+        items = [{"item_id": "dup", "claim_id": "cl1"}] * 9
+        items += [{"item_id": "i%d" % n, "claim_id": "cl2"} for n in range(3)]
+        message = [f for f in self._run(items=items)
+                   if f.path == "items.source"][0].message
+        self.assertIn("lines 2, 3, 4, 5, 6 and 3 more", message)
 
 
 class TestGate5SealedSplit(unittest.TestCase):
