@@ -23,7 +23,7 @@ than fabricate when the context is thin?) and **citation accuracy**
 (`c_citation` -- when the assistant does cite a chunk, does that chunk
 actually support the sentence it's attached to?). Both trace to a ranked harm
 pathway in `domain.harm_pathways`, and three claims operationalize the two
-constructs across an item pool of 12 realistic support-widget prompts about a
+constructs across an item pool of 13 realistic support-widget prompts about a
 fictional product, "Northwind Cloud Backup."
 
 ## Running the validator
@@ -85,8 +85,12 @@ unsupported assertions, e.g. item `i04` asking a max-file-size question
 against a single supporting chunk) and `cl2` (`c_grounding` -> `hp1`,
 decline-vs-fabricate under insufficient context, e.g. item `i07` asking
 whether a sixth seat can be bought for the Family plan for an extra fee,
-against the same chunk used elsewhere to state what the plan includes --
-which says nothing at all about buying more).
+against the same chunk item `i13` uses to ask how much total storage the
+Family plan includes). That chunk states 5 seats sharing a 2 TB pool --
+enough to answer `i13` plainly, and silent on buying a sixth seat, which is
+why a grounded answer to `i07` has to decline rather than guess. Same chunk,
+two items, opposite sufficiency verdicts: sufficiency is a property of the
+question asked against the context, not of the context by itself.
 
 ## The pathway we chose not to measure
 
@@ -112,12 +116,12 @@ with real, minimal content:
 
 | Card field | File | What it holds |
 |---|---|---|
-| `items.source` | `items/pool.jsonl` | The 12-item pool, 4 items per claim, `item_id` + `claim_id` on every row (what makes Gate 4 checkable). |
+| `items.source` | `items/pool.jsonl` | The 13-item pool -- 5 items for `cl1`, 4 each for `cl2` and `cl3` -- `item_id` + `claim_id` on every row (what makes Gate 4 checkable). |
 | `items.splits.dev.path` | `items/dev.jsonl` | 3 freely-inspectable items, one per claim, for iterating on the rubric during design. |
 | `items.splits.test.path` | `items/test.jsonl` | The 4-item sealed test split (Gate 5). |
 | `evidence_model[].rubric_ref` (all three) | `rubrics/grounding.md` | The three scoring rules the evidence model claims exist: unsupported assertions, decline-vs-fabricate, citation-claim mismatch -- plus the 1-4 scale used in the gold set below. |
 | `grader.rubric_ref` | `rubrics/grounding.md` | Same file; the LLM judge is scored against the same rubric the evidence model states. |
-| `grader.gold_set` | `labels/gold.csv` | 12 rows, one per pool item: `item_id`, `judge_score`, and **two** independent human rater columns (`human_a`, `human_b`). |
+| `grader.gold_set` | `labels/gold.csv` | 12 rows, one per each of the pool's original 12 items (`i13` was added afterward and carries no gold label): `item_id`, `judge_score`, and **two** independent human rater columns (`human_a`, `human_b`). |
 | `preregistration.protocol.prompts_ref` | `protocol.md` | The fixed system prompt, turn template, seeds (`[11, 23, 47]`), temperature (`0.2`), and elicitation budget -- the exact protocol `preregistration.content_hash` is a hash of. |
 
 Verified mechanically (this must print nothing but the confirmation line):
